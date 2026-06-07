@@ -11,6 +11,8 @@ export interface Profile {
   airtime_s: number;
   playtime_s: number;
   credits: number;
+  owned_paints: string[];
+  owned_trucks: string[];
 }
 
 interface GameState {

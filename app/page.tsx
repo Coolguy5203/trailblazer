@@ -3,14 +3,13 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type * as THREE from "three";
 import { useGame, type Profile, type ControlScheme } from "@/lib/store";
-import { signIn, signUp, signOut, loadCurrentProfile, saveStats } from "@/lib/profile";
+import { signIn, signUp, signOut, loadCurrentProfile, saveStats, purchaseItem } from "@/lib/profile";
 import { useRoom, browsePublicRooms } from "@/lib/useRoom";
 import { creditsEarned, formatCredits, CREDIT_SYMBOL } from "@/lib/economy";
+import { BASIC_PAINTS, PREMIUM_PAINTS, TRUCKS, paintHex, type PaintOption } from "@/lib/shop";
 import HUD from "@/components/HUD";
 
 const Scene = dynamic(() => import("@/components/Scene"), { ssr: false });
-
-const TRUCK_COLORS = ["#c8512e", "#2e6fc8", "#3ca35a", "#d2a429", "#7a5cd6", "#b9bcc2", "#222831"];
 
 type Screen = "auth" | "menu" | "driving";
 
@@ -18,7 +17,8 @@ export default function Page() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [screen, setScreen] = useState<Screen>("auth");
   const [booted, setBooted] = useState(false);
-  const [color, setColor] = useState(TRUCK_COLORS[0]);
+  const [paintId, setPaintId] = useState("rust");
+  const [truckId, setTruckId] = useState("stock");
   const [lastEarned, setLastEarned] = useState<number | null>(null);
 
   const room = useRoom();
@@ -77,7 +77,7 @@ export default function Page() {
   if (screen === "driving") {
     return (
       <main className="relative h-screen w-screen overflow-hidden bg-[#bcd4e6]">
-        <Scene color={color} remotes={room.remotes} onFrame={onFrame} />
+        <Scene color={paintHex(paintId)} truckId={truckId} remotes={room.remotes} onFrame={onFrame} />
         <HUD roomCode={room.code ?? undefined} />
         {room.code && (
           <div className="pointer-events-none absolute right-6 top-6 rounded-lg bg-black/35 px-3 py-2 text-sm text-white backdrop-blur">
@@ -109,8 +109,14 @@ export default function Page() {
           <Menu
             profile={profile!}
             lastEarned={lastEarned}
-            color={color}
-            setColor={setColor}
+            paintId={paintId}
+            setPaintId={setPaintId}
+            truckId={truckId}
+            setTruckId={setTruckId}
+            refreshProfile={async () => {
+              const p = await loadCurrentProfile();
+              if (p) setProfile(p);
+            }}
             scheme={scheme}
             setScheme={setScheme}
             room={room}
@@ -202,8 +208,11 @@ function AuthForm({ onAuthed }: { onAuthed: (p: Profile) => void }) {
 function Menu({
   profile,
   lastEarned,
-  color,
-  setColor,
+  paintId,
+  setPaintId,
+  truckId,
+  setTruckId,
+  refreshProfile,
   scheme,
   setScheme,
   room,
@@ -212,14 +221,34 @@ function Menu({
 }: {
   profile: Profile;
   lastEarned: number | null;
-  color: string;
-  setColor: (c: string) => void;
+  paintId: string;
+  setPaintId: (c: string) => void;
+  truckId: string;
+  setTruckId: (id: string) => void;
+  refreshProfile: () => Promise<void>;
   scheme: ControlScheme;
   setScheme: (s: ControlScheme) => void;
   room: ReturnType<typeof useRoom>;
   onPlay: () => void;
   onSignOut: () => void;
 }) {
+  const [shopErr, setShopErr] = useState<string | null>(null);
+  const [buying, setBuying] = useState<string | null>(null);
+
+  const buy = async (kind: "paint" | "truck", id: string) => {
+    setShopErr(null);
+    setBuying(id);
+    try {
+      await purchaseItem(kind, id);
+      await refreshProfile();
+      if (kind === "paint") setPaintId(id);
+      else setTruckId(id);
+    } catch (e: any) {
+      setShopErr(e.message);
+    } finally {
+      setBuying(null);
+    }
+  };
   const [joinCode, setJoinCode] = useState("");
   const [rooms, setRooms] = useState<{ code: string; host_name: string; players: number }[]>([]);
   const [busy, setBusy] = useState(false);
@@ -289,19 +318,90 @@ function Menu({
         )}
       </div>
 
-      {/* truck color */}
+      {/* vehicles */}
       <div className="rounded-xl bg-stone-800/60 p-4 ring-1 ring-white/10">
-        <div className="mb-2 text-sm font-semibold text-stone-300">Truck paint</div>
-        <div className="flex gap-2">
-          {TRUCK_COLORS.map((c) => (
-            <button
-              key={c}
-              onClick={() => setColor(c)}
-              style={{ background: c }}
-              className={`h-8 w-8 rounded-full ring-2 transition ${color === c ? "ring-amber-400" : "ring-transparent"}`}
-            />
+        <div className="mb-3 text-sm font-semibold text-stone-300">Garage</div>
+        <div className="space-y-2">
+          {TRUCKS.map((t) => {
+            const owned = profile.owned_trucks?.includes(t.id) ?? t.id === "stock";
+            const equipped = truckId === t.id;
+            const afford = profile.credits >= t.price;
+            return (
+              <div
+                key={t.id}
+                className={`rounded-lg p-3 ring-1 transition ${
+                  equipped ? "bg-amber-500/10 ring-amber-400/40" : "bg-stone-900 ring-white/5"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-semibold">{t.name}</div>
+                    <div className="text-xs text-stone-400">{t.blurb}</div>
+                  </div>
+                  {owned ? (
+                    <button
+                      onClick={() => setTruckId(t.id)}
+                      disabled={equipped}
+                      className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-bold transition ${
+                        equipped ? "bg-amber-500 text-black" : "bg-stone-700 hover:bg-stone-600"
+                      }`}
+                    >
+                      {equipped ? "Driving" : "Drive"}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => buy("truck", t.id)}
+                      disabled={!afford || buying === t.id}
+                      className="shrink-0 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-black transition hover:brightness-110 disabled:opacity-40"
+                    >
+                      {buying === t.id ? "…" : `${CREDIT_SYMBOL} ${formatCredits(t.price)}`}
+                    </button>
+                  )}
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {(["speed", "grip", "climb"] as const).map((k) => (
+                    <div key={k}>
+                      <div className="mb-0.5 text-[10px] uppercase tracking-wide text-stone-500">{k}</div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-stone-700">
+                        <div className="h-full rounded-full bg-amber-400" style={{ width: `${t.stats[k] * 100}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* paint */}
+      <div className="rounded-xl bg-stone-800/60 p-4 ring-1 ring-white/10">
+        <div className="mb-2 text-sm font-semibold text-stone-300">Paint</div>
+        <div className="mb-1 text-[10px] uppercase tracking-wide text-stone-500">Standard</div>
+        <div className="mb-3 flex flex-wrap gap-2">
+          {BASIC_PAINTS.map((p) => (
+            <PaintSwatch key={p.id} p={p} owned equipped={paintId === p.id} onEquip={() => setPaintId(p.id)} onBuy={() => {}} buying={false} />
           ))}
         </div>
+        <div className="mb-1 text-[10px] uppercase tracking-wide text-stone-500">Premium</div>
+        <div className="flex flex-wrap gap-2">
+          {PREMIUM_PAINTS.map((p) => {
+            const owned = profile.owned_paints?.includes(p.id) ?? false;
+            return (
+              <PaintSwatch
+                key={p.id}
+                p={p}
+                owned={owned}
+                equipped={paintId === p.id}
+                canAfford={profile.credits >= p.price}
+                buying={buying === p.id}
+                onEquip={() => setPaintId(p.id)}
+                onBuy={() => buy("paint", p.id)}
+              />
+            );
+          })}
+        </div>
+        {shopErr && <p className="mt-2 text-xs text-red-400">{shopErr}</p>}
       </div>
 
       {/* controls */}
@@ -376,6 +476,45 @@ function Menu({
       </div>
 
       {err && <p className="text-center text-sm text-red-400">{err}</p>}
+    </div>
+  );
+}
+
+function PaintSwatch({
+  p,
+  owned,
+  equipped,
+  canAfford = true,
+  buying,
+  onEquip,
+  onBuy,
+}: {
+  p: PaintOption;
+  owned: boolean;
+  equipped: boolean;
+  canAfford?: boolean;
+  buying: boolean;
+  onEquip: () => void;
+  onBuy: () => void;
+}) {
+  return (
+    <div className="flex w-12 flex-col items-center gap-1">
+      <button
+        onClick={owned ? onEquip : onBuy}
+        disabled={buying || (!owned && !canAfford)}
+        title={owned ? p.name : `${p.name} — ${p.price} credits`}
+        style={{ background: p.hex }}
+        className={`relative h-9 w-9 rounded-full ring-2 transition disabled:opacity-40 ${
+          equipped ? "ring-amber-400" : "ring-white/10 hover:ring-white/40"
+        }`}
+      >
+        {!owned && (
+          <span className="absolute inset-0 grid place-items-center text-xs text-white/90 drop-shadow">🔒</span>
+        )}
+      </button>
+      <span className="text-[9px] leading-none text-stone-400">
+        {owned ? p.name : `${CREDIT_SYMBOL}${formatCredits(p.price)}`}
+      </span>
     </div>
   );
 }

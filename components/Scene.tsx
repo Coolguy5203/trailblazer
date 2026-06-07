@@ -87,12 +87,13 @@ function RemoteTruck({ p }: { p: RemotePlayer }) {
 
 interface SceneProps {
   color?: string;
+  truckId?: string;
   spawn?: [number, number, number];
   remotes?: RemotePlayer[];
   onFrame?: (pos: THREE.Vector3, quat: THREE.Quaternion, speedKmh: number) => void;
 }
 
-export default function Scene({ color, spawn, remotes = [], onFrame }: SceneProps) {
+export default function Scene({ color, truckId, spawn, remotes = [], onFrame }: SceneProps) {
   const chassis = useRef<RapierRigidBody | null>(null);
   const scheme = useGame((s) => s.scheme);
 
@@ -122,7 +123,7 @@ export default function Scene({ color, spawn, remotes = [], onFrame }: SceneProp
 
       <Physics gravity={[0, -20, 0]} timeStep={1 / 60}>
         <Terrain />
-        <Truck ref={chassis} color={color} spawn={spawn} onFrame={onFrame} />
+        <Truck ref={chassis} truckId={truckId} color={color} spawn={spawn} onFrame={onFrame} />
         {remotes.map((p) => (
           <RemoteTruck key={p.id} p={p} />
         ))}

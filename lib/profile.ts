@@ -50,11 +50,24 @@ export async function loadCurrentProfile(): Promise<Profile | null> {
   if (!auth.user) return null;
   const { data, error } = await supabase
     .from("tb_profiles")
-    .select("id, username, distance_m, jumps, airtime_s, playtime_s, credits")
+    .select("id, username, distance_m, jumps, airtime_s, playtime_s, credits, owned_paints, owned_trucks")
     .eq("id", auth.user.id)
     .single();
   if (error || !data) return null;
   return data as Profile;
+}
+
+// Server-authoritative purchase. Returns the new credit balance.
+// Throws a friendly message on failure (too poor / already owned / unknown).
+export async function purchaseItem(kind: "paint" | "truck", id: string): Promise<number> {
+  const { data, error } = await supabase.rpc("tb_purchase", { p_kind: kind, p_id: id });
+  if (error) {
+    const m = error.message || "";
+    if (m.includes("insufficient")) throw new Error("Not enough credits.");
+    if (m.includes("already")) throw new Error("You already own this.");
+    throw new Error("Purchase failed.");
+  }
+  return data as number;
 }
 
 // Persist accumulated session stats to the player's profile.
