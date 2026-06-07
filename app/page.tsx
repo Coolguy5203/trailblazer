@@ -7,6 +7,7 @@ import { signIn, signUp, signOut, loadCurrentProfile, saveStats, purchaseItem } 
 import { useRoom, browsePublicRooms } from "@/lib/useRoom";
 import { creditsEarned, formatCredits, CREDIT_SYMBOL } from "@/lib/economy";
 import { BASIC_PAINTS, PREMIUM_PAINTS, TRUCKS, paintHex, type PaintOption } from "@/lib/shop";
+import { regionAt, regionInfo } from "@/lib/regions";
 import HUD from "@/components/HUD";
 
 const Scene = dynamic(() => import("@/components/Scene"), { ssr: false });
@@ -25,6 +26,7 @@ export default function Page() {
   const scheme = useGame((s) => s.scheme);
   const setScheme = useGame((s) => s.setScheme);
   const resetSession = useGame((s) => s.resetSession);
+  const setRegionId = useGame((s) => s.setRegionId);
 
   // restore session on load
   useEffect(() => {
@@ -41,9 +43,10 @@ export default function Page() {
   const startSession = useCallback(() => {
     resetSession();
     setLastEarned(null);
+    setRegionId(null); // so the first frame announces the region we spawn in
     sessionStart.current = performance.now();
     setScreen("driving");
-  }, [resetSession]);
+  }, [resetSession, setRegionId]);
 
   const onLeaveDriving = useCallback(async () => {
     room.leave();
@@ -60,12 +63,15 @@ export default function Page() {
     setScreen("menu");
   }, [room]);
 
-  // broadcast our pose to the lobby when in a room
+  // broadcast our pose to the lobby + detect region changes each frame
   const onFrame = useCallback(
     (pos: THREE.Vector3, quat: THREE.Quaternion) => {
       if (room.code) {
         room.sendPose([pos.x, pos.y, pos.z], [quat.x, quat.y, quat.z, quat.w]);
       }
+      const rid = regionAt(pos.x, pos.z)?.id ?? "wilds";
+      const st = useGame.getState();
+      if (rid !== st.regionId) st.setRegionId(rid);
     },
     [room]
   );
@@ -79,6 +85,7 @@ export default function Page() {
       <main className="relative h-screen w-screen overflow-hidden bg-[#bcd4e6]">
         <Scene color={paintHex(paintId)} truckId={truckId} remotes={room.remotes} onFrame={onFrame} />
         <HUD roomCode={room.code ?? undefined} />
+        <RegionBanner />
         {room.code && (
           <div className="pointer-events-none absolute right-6 top-6 rounded-lg bg-black/35 px-3 py-2 text-sm text-white backdrop-blur">
             {room.memberCount} driver{room.memberCount === 1 ? "" : "s"} online
@@ -476,6 +483,32 @@ function Menu({
       </div>
 
       {err && <p className="text-center text-sm text-red-400">{err}</p>}
+    </div>
+  );
+}
+
+function RegionBanner() {
+  const regionId = useGame((s) => s.regionId);
+  const [show, setShow] = useState(false);
+  const [info, setInfo] = useState({ name: "", tagline: "" });
+
+  useEffect(() => {
+    if (!regionId) return;
+    setInfo(regionInfo(regionId));
+    setShow(true);
+    const t = setTimeout(() => setShow(false), 3400);
+    return () => clearTimeout(t);
+  }, [regionId]);
+
+  return (
+    <div
+      className={`pointer-events-none absolute left-1/2 top-24 -translate-x-1/2 text-center transition-all duration-700 ${
+        show ? "translate-y-0 opacity-100" : "-translate-y-3 opacity-0"
+      }`}
+    >
+      <div className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300/90">Now entering</div>
+      <div className="mt-1 text-4xl font-black text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.65)]">{info.name}</div>
+      <div className="mt-1 text-sm text-white/85 drop-shadow">{info.tagline}</div>
     </div>
   );
 }

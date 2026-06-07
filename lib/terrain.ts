@@ -1,16 +1,19 @@
 import * as THREE from "three";
+import { REGIONS, type Region } from "./regions";
 
-// --- Map dimensions (enlarged) ---
-export const MAP_SIZE = 300; // world units, square, centered on origin
-export const SEGMENTS = 180; // grid resolution for visuals + physics trimesh
+// --- Map dimensions (large, multi-region world) ---
+export const MAP_SIZE = 440; // world units, square, centered on origin
+export const SEGMENTS = 220; // grid resolution for visuals + physics trimesh
 export const HALF = MAP_SIZE / 2;
+
+const C: Record<string, Region> = Object.fromEntries(REGIONS.map((r) => [r.id, r]));
 
 function smoothstep(edge0: number, edge1: number, x: number) {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
 }
 
-// Smooth, deterministic bump used to plant hills/ramps at fixed spots.
+// Radial bump (1 at centre → 0 at radius), smooth.
 function bump(x: number, z: number, cx: number, cz: number, r: number, h: number) {
   const d = Math.hypot(x - cx, z - cz);
   if (d > r) return 0;
@@ -18,65 +21,85 @@ function bump(x: number, z: number, cx: number, cz: number, r: number, h: number
   return h * t * t * (3 - 2 * t);
 }
 
+// Region influence weight: ~1 across the inner area, feathering to 0 at the edge.
+function w(x: number, z: number, reg: Region) {
+  const d = Math.hypot(x - reg.x, z - reg.z);
+  if (d >= reg.radius) return 0;
+  return smoothstep(reg.radius, reg.radius * 0.25, d);
+}
+
+// A simple wedge ramp rising along +x within a small footprint.
+function ramp(x: number, z: number, cx: number, cz: number, len: number, wid: number, h: number) {
+  const rx = x - cx,
+    rz = z - cz;
+  if (rx < 0 || rx > len || Math.abs(rz) > wid) return 0;
+  return (rx / len) * h * smoothstep(wid, wid * 0.4, Math.abs(rz));
+}
+
 /**
- * Terrain height at world (x, z). The center ~30u is kept gentle for learning;
- * the larger surrounding area rolls into hills, ramps, a mogul field, a steep
- * hill climb, and a rock-crawl basin. Gradients stay surmountable so a capable
- * truck can climb most of it. No real-world references.
+ * Terrain height at world (x, z). Built region-by-region so each area suits a
+ * different driving style: flat speedway, steep climb, rolling dunes, technical
+ * ridge, rock basin, timber hollow and a ramp park. No real-world references.
  */
 export function terrainHeight(x: number, z: number): number {
-  const d = Math.hypot(x, z);
+  const dHome = Math.hypot(x - C.home.x, z - C.home.z);
 
-  // gentle rolling base across the whole map
+  // gentle global rolling base
   let h =
-    Math.sin(x * 0.045) * Math.cos(z * 0.04) * 3.0 +
-    Math.sin(x * 0.1 + 1.7) * Math.cos(z * 0.09) * 1.4;
+    Math.sin(x * 0.04) * Math.cos(z * 0.038) * 2.4 +
+    Math.sin(x * 0.085 + 1.3) * Math.cos(z * 0.075) * 1.2;
 
-  // keep the central learning pad flat
-  h *= smoothstep(10, 34, d);
+  // flatten the home pad...
+  h *= smoothstep(10, 38, dHome);
+  // ...and keep the Salt Pan Speedway near dead-flat for top speed
+  h *= 1 - 0.9 * w(x, z, C.speedway);
 
-  // --- scattered hills across the bigger world ---
-  h += bump(x, z, 60, -55, 30, 9.0); // big hill NE
-  h += bump(x, z, -70, -45, 26, 7.0); // hill NW
-  h += bump(x, z, -60, 65, 24, 6.0); // hill SW
-  h += bump(x, z, 95, 30, 28, 8.0); // far-E hill
-  h += bump(x, z, 20, 100, 22, 5.5); // far-S hill
-  h += bump(x, z, -110, 10, 26, 7.5); // far-W hill
+  // --- Granite Ascent: tall, steep, climbable massif (Boulder's strength) ---
+  h += bump(x, z, C.ascent.x, C.ascent.z, C.ascent.radius * 0.95, 34);
+  h += bump(x, z, C.ascent.x - 28, C.ascent.z + 18, 30, 12); // secondary peak
+  h += bump(x, z, C.ascent.x + 22, C.ascent.z + 26, 26, 9);
 
-  // --- launch ramp (rising toward +x) just east of the pad ---
+  // --- The Dune Sea: big rolling waves for speed + air ---
   {
-    const rx = x - 26,
-      rz = z - 30;
-    if (rx > 0 && rx < 18 && Math.abs(rz) < 5.5) {
-      h += (rx / 18) * 6.0 * smoothstep(5.5, 2.5, Math.abs(rz));
+    const wd = w(x, z, C.dunes);
+    if (wd > 0) {
+      const dune = Math.sin(x * 0.11) * 4.2 + Math.sin((x + z) * 0.07 + 1.0) * 3.0 + Math.cos(z * 0.13) * 2.0;
+      h += dune * wd;
     }
   }
 
-  // --- steep hill climb: a tall, climbable cone in the NW quadrant ---
-  h += bump(x, z, -45, -100, 30, 18.0);
+  // --- Switchback Ridge: clustered medium hills, twisty technical lines ---
+  h += bump(x, z, C.ridge.x + 18, C.ridge.z - 16, 30, 11);
+  h += bump(x, z, C.ridge.x - 20, C.ridge.z + 14, 28, 9);
+  h += bump(x, z, C.ridge.x + 4, C.ridge.z + 30, 24, 7);
+  h += bump(x, z, C.ridge.x - 30, C.ridge.z - 24, 22, 6);
 
-  // --- mogul / whoops field SE: rows of small bumps to absorb with suspension ---
-  {
-    const inField = x > 40 && x < 90 && z > 55 && z < 100;
-    if (inField) {
-      const m = Math.sin(x * 0.45) * Math.cos(z * 0.45);
-      h += m * 0.7 * smoothstep(40, 50, x) * smoothstep(100, 90, z);
-    }
-  }
+  // --- Timber Hollow: moderate rolling humps (logs are props) ---
+  h += bump(x, z, C.timber.x + 14, C.timber.z + 12, 30, 6.5);
+  h += bump(x, z, C.timber.x - 22, C.timber.z - 10, 26, 5.5);
 
-  // --- rock-crawl basin SW: a shallow dip so scattered boulders sit in a bowl ---
-  h += -bump(x, z, -95, 95, 28, 5.0);
+  // --- Boulder Basin: shallow bowl so boulders sit in a pit ---
+  h += -bump(x, z, C.basin.x, C.basin.z, C.basin.radius * 0.9, 6.0);
 
-  // raised rim border so the map has a soft natural edge (scales with map size)
-  h += smoothstep(HALF - 30, HALF - 6, Math.abs(x)) * 12;
-  h += smoothstep(HALF - 30, HALF - 6, Math.abs(z)) * 12;
+  // --- The Proving Grounds: a few terrain kickers/ramps ---
+  h += ramp(x, z, C.proving.x - 24, C.proving.z - 6, 16, 5, 6.0);
+  h += ramp(x, z, C.proving.x + 2, C.proving.z + 14, 14, 4.5, 5.0);
+  h += ramp(x, z, C.proving.x + 20, C.proving.z - 18, 18, 5, 7.0);
+
+  // --- a couple of standalone hills out in the backcountry ---
+  h += bump(x, z, 175, -150, 40, 10);
+  h += bump(x, z, 160, 170, 30, 7);
+
+  // raised rim border so the map has a soft natural edge
+  h += smoothstep(HALF - 34, HALF - 8, Math.abs(x)) * 14;
+  h += smoothstep(HALF - 34, HALF - 8, Math.abs(z)) * 14;
 
   return h;
 }
 
 export interface TerrainData {
   geometry: THREE.BufferGeometry;
-  vertices: Float32Array; // for rapier trimesh
+  vertices: Float32Array;
   indices: Uint32Array;
 }
 
@@ -85,7 +108,7 @@ let cached: TerrainData | null = null;
 export function buildTerrain(): TerrainData {
   if (cached) return cached;
   const geo = new THREE.PlaneGeometry(MAP_SIZE, MAP_SIZE, SEGMENTS, SEGMENTS);
-  geo.rotateX(-Math.PI / 2); // lie flat in XZ, Y up
+  geo.rotateX(-Math.PI / 2);
 
   const pos = geo.attributes.position as THREE.BufferAttribute;
   const colors: number[] = [];
@@ -93,6 +116,7 @@ export function buildTerrain(): TerrainData {
   const mid = new THREE.Color("#7c8b4e"); // scrub
   const high = new THREE.Color("#9aa861"); // dry grass
   const rock = new THREE.Color("#8a8276");
+  const sand = new THREE.Color("#cdb079"); // dunes / salt pan
   const c = new THREE.Color();
 
   for (let i = 0; i < pos.count; i++) {
@@ -101,11 +125,13 @@ export function buildTerrain(): TerrainData {
     const y = terrainHeight(x, z);
     pos.setY(i, y);
 
-    // vertex color by elevation for a natural, model-free look
-    const t = THREE.MathUtils.clamp((y + 3) / 16, 0, 1);
+    const t = THREE.MathUtils.clamp((y + 3) / 18, 0, 1);
     if (t < 0.45) c.copy(low).lerp(mid, t / 0.45);
     else c.copy(mid).lerp(high, (t - 0.45) / 0.55);
-    if (y > 9) c.lerp(rock, smoothstep(9, 14, y));
+    if (y > 11) c.lerp(rock, smoothstep(11, 18, y));
+    // tint sandy regions (speedway + dunes)
+    const sandiness = Math.max(w(x, z, C.speedway), w(x, z, C.dunes) * 0.9);
+    if (sandiness > 0) c.lerp(sand, sandiness * 0.7);
     colors.push(c.r, c.g, c.b);
   }
   geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
@@ -118,9 +144,8 @@ export function buildTerrain(): TerrainData {
   return cached;
 }
 
-// Fixed obstacle props. Rocks are low, rounded boulders the truck can climb
-// over; logs are crossable. Spread across the larger map, with a cluster in the
-// SW rock-crawl basin.
+// Fixed obstacle props. Rocks are low rounded boulders the truck climbs over;
+// logs are crossable. Clustered into the regions that suit them.
 export interface Prop {
   type: "rock" | "log";
   x: number;
@@ -130,22 +155,30 @@ export interface Prop {
 }
 
 export const PROPS: Prop[] = [
-  // near the pad — easy first obstacles
-  { type: "rock", x: 16, z: -14, size: 1.3, rot: 0.3 },
-  { type: "rock", x: -20, z: 12, size: 1.6, rot: 1.1 },
-  { type: "log", x: 12, z: 22, size: 5.0, rot: 0.5 },
-  { type: "log", x: -28, z: -10, size: 6.0, rot: -0.4 },
-  { type: "rock", x: 34, z: 8, size: 1.4, rot: 0.7 },
-  // scattered across the world
-  { type: "rock", x: 70, z: -20, size: 1.8, rot: 1.5 },
-  { type: "log", x: 0, z: 40, size: 6.0, rot: 1.57 },
-  { type: "rock", x: -80, z: 30, size: 1.7, rot: 2.0 },
-  { type: "log", x: 60, z: 70, size: 5.5, rot: 0.9 },
-  // SW rock-crawl basin cluster
-  { type: "rock", x: -88, z: 88, size: 1.5, rot: 0.2 },
-  { type: "rock", x: -98, z: 96, size: 2.0, rot: 1.0 },
-  { type: "rock", x: -104, z: 90, size: 1.3, rot: 2.4 },
-  { type: "rock", x: -92, z: 102, size: 1.7, rot: 0.6 },
-  { type: "rock", x: -100, z: 104, size: 1.2, rot: 1.9 },
-  { type: "log", x: -96, z: 84, size: 5.0, rot: 0.3 },
+  // near home — easy first obstacles
+  { type: "rock", x: 18, z: -16, size: 1.3, rot: 0.3 },
+  { type: "rock", x: -22, z: 14, size: 1.6, rot: 1.1 },
+  { type: "log", x: 14, z: 24, size: 5.0, rot: 0.5 },
+  // Boulder Basin rock garden cluster
+  { type: "rock", x: -140, z: 150, size: 1.6, rot: 0.2 },
+  { type: "rock", x: -152, z: 160, size: 2.2, rot: 1.0 },
+  { type: "rock", x: -160, z: 152, size: 1.4, rot: 2.4 },
+  { type: "rock", x: -146, z: 168, size: 1.8, rot: 0.6 },
+  { type: "rock", x: -158, z: 170, size: 1.3, rot: 1.9 },
+  { type: "rock", x: -150, z: 144, size: 2.0, rot: 0.9 },
+  { type: "log", x: -138, z: 166, size: 5.0, rot: 0.3 },
+  // Granite Ascent — boulders strewn on the lower slopes
+  { type: "rock", x: -100, z: -100, size: 2.0, rot: 0.4 },
+  { type: "rock", x: -150, z: -95, size: 1.7, rot: 1.3 },
+  { type: "rock", x: -95, z: -150, size: 1.9, rot: 2.1 },
+  // Timber Hollow — fallen logs
+  { type: "log", x: 95, z: -140, size: 6.0, rot: 0.4 },
+  { type: "log", x: 110, z: -125, size: 5.5, rot: 1.2 },
+  { type: "log", x: 85, z: -155, size: 6.5, rot: -0.3 },
+  { type: "log", x: 120, z: -150, size: 5.0, rot: 1.9 },
+  { type: "rock", x: 105, z: -160, size: 1.5, rot: 0.7 },
+  // Switchback Ridge — a few rocks on the trail
+  { type: "rock", x: -150, z: 55, size: 1.6, rot: 1.1 },
+  { type: "log", x: -165, z: 70, size: 5.0, rot: 0.6 },
+  { type: "rock", x: -140, z: 80, size: 1.4, rot: 2.0 },
 ];

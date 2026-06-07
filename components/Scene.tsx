@@ -101,22 +101,22 @@ export default function Scene({ color, truckId, spawn, remotes = [], onFrame }: 
   useEffect(() => setScheme(scheme), [scheme]);
 
   return (
-    <Canvas shadows camera={{ position: [0, 8, 14], fov: 60, near: 0.3, far: 600 }} dpr={[1, 1.75]}>
+    <Canvas shadows camera={{ position: [0, 8, 14], fov: 60, near: 0.3, far: 1400 }} dpr={[1, 1.75]}>
       <color attach="background" args={["#bcd4e6"]} />
-      <fog attach="fog" args={["#bcd4e6", 90, 320]} />
-      <Sky sunPosition={[60, 40, 20]} turbidity={6} rayleigh={1.2} />
+      <fog attach="fog" args={["#bcd4e6", 140, 560]} />
+      <Sky sunPosition={[120, 80, 40]} turbidity={6} rayleigh={1.2} />
       <hemisphereLight intensity={0.6} groundColor="#5a4a32" color="#cfe3f2" />
       <directionalLight
         castShadow
-        position={[60, 70, 30]}
+        position={[140, 180, 90]}
         intensity={2.1}
         shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-120}
-        shadow-camera-right={120}
-        shadow-camera-top={120}
-        shadow-camera-bottom={-120}
+        shadow-camera-left={-220}
+        shadow-camera-right={220}
+        shadow-camera-top={220}
+        shadow-camera-bottom={-220}
         shadow-camera-near={1}
-        shadow-camera-far={300}
+        shadow-camera-far={520}
         shadow-bias={-0.0004}
       />
       <Environment preset="park" />

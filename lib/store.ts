@@ -34,6 +34,10 @@ interface GameState {
   addJump: (airtime: number) => void;
   resetSession: () => void;
 
+  // current named region the player is in (null = backcountry/wilds)
+  regionId: string | null;
+  setRegionId: (id: string | null) => void;
+
   // app phase
   phase: "menu" | "driving";
   setPhase: (p: GameState["phase"]) => void;
@@ -54,6 +58,9 @@ export const useGame = create<GameState>((set) => ({
   addDistance: (m) => set((s) => ({ distanceM: s.distanceM + m })),
   addJump: (airtime) => set((s) => ({ jumps: s.jumps + 1, bestAir: Math.max(s.bestAir, airtime) })),
   resetSession: () => set({ distanceM: 0, jumps: 0, bestAir: 0 }),
+
+  regionId: null,
+  setRegionId: (regionId) => set({ regionId }),
 
   phase: "menu",
   setPhase: (phase) => set({ phase }),
