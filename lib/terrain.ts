@@ -59,8 +59,8 @@ export function terrainHeight(x: number, z: number): number {
   {
     const inField = x > 40 && x < 90 && z > 55 && z < 100;
     if (inField) {
-      const m = Math.sin(x * 0.9) * Math.cos(z * 0.9);
-      h += m * 1.6 * smoothstep(40, 50, x) * smoothstep(100, 90, z);
+      const m = Math.sin(x * 0.45) * Math.cos(z * 0.45);
+      h += m * 0.7 * smoothstep(40, 50, x) * smoothstep(100, 90, z);
     }
   }
 
