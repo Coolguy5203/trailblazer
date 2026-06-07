@@ -10,6 +10,7 @@ export interface Profile {
   jumps: number;
   airtime_s: number;
   playtime_s: number;
+  credits: number;
 }
 
 interface GameState {

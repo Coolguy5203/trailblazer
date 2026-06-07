@@ -5,6 +5,7 @@ import type * as THREE from "three";
 import { useGame, type Profile, type ControlScheme } from "@/lib/store";
 import { signIn, signUp, signOut, loadCurrentProfile, saveStats } from "@/lib/profile";
 import { useRoom, browsePublicRooms } from "@/lib/useRoom";
+import { creditsEarned, formatCredits, CREDIT_SYMBOL } from "@/lib/economy";
 import HUD from "@/components/HUD";
 
 const Scene = dynamic(() => import("@/components/Scene"), { ssr: false });
@@ -18,6 +19,7 @@ export default function Page() {
   const [screen, setScreen] = useState<Screen>("auth");
   const [booted, setBooted] = useState(false);
   const [color, setColor] = useState(TRUCK_COLORS[0]);
+  const [lastEarned, setLastEarned] = useState<number | null>(null);
 
   const room = useRoom();
   const scheme = useGame((s) => s.scheme);
@@ -38,6 +40,7 @@ export default function Page() {
   const sessionStart = useRef(0);
   const startSession = useCallback(() => {
     resetSession();
+    setLastEarned(null);
     sessionStart.current = performance.now();
     setScreen("driving");
   }, [resetSession]);
@@ -45,6 +48,7 @@ export default function Page() {
   const onLeaveDriving = useCallback(async () => {
     room.leave();
     const st = useGame.getState();
+    setLastEarned(creditsEarned(st.distanceM, st.jumps));
     const playtime = (performance.now() - sessionStart.current) / 1000;
     try {
       await saveStats({ distance_m: st.distanceM, jumps: st.jumps, airtime_s: st.bestAir, playtime_s: playtime });
@@ -104,6 +108,7 @@ export default function Page() {
         ) : (
           <Menu
             profile={profile!}
+            lastEarned={lastEarned}
             color={color}
             setColor={setColor}
             scheme={scheme}
@@ -196,6 +201,7 @@ function AuthForm({ onAuthed }: { onAuthed: (p: Profile) => void }) {
 
 function Menu({
   profile,
+  lastEarned,
   color,
   setColor,
   scheme,
@@ -205,6 +211,7 @@ function Menu({
   onSignOut,
 }: {
   profile: Profile;
+  lastEarned: number | null;
   color: string;
   setColor: (c: string) => void;
   scheme: ControlScheme;
@@ -255,16 +262,31 @@ function Menu({
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between rounded-xl bg-stone-800/60 px-4 py-3 ring-1 ring-white/10">
-        <div>
-          <div className="font-bold">{profile.username}</div>
-          <div className="text-xs text-stone-400">
-            {(profile.distance_m / 1000).toFixed(1)} km driven · {profile.jumps} jumps
+      <div className="rounded-xl bg-stone-800/60 px-4 py-3 ring-1 ring-white/10">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-bold">{profile.username}</div>
+            <div className="text-xs text-stone-400">
+              {(profile.distance_m / 1000).toFixed(1)} km driven · {profile.jumps} jumps
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-amber-500/15 px-3 py-1.5 text-right ring-1 ring-amber-400/30">
+              <div className="font-mono text-lg font-bold leading-none text-amber-300">
+                {CREDIT_SYMBOL} {formatCredits(profile.credits)}
+              </div>
+              <div className="text-[10px] uppercase tracking-wide text-amber-200/60">credits</div>
+            </div>
+            <button onClick={onSignOut} className="text-xs text-stone-400 underline hover:text-stone-200">
+              Sign out
+            </button>
           </div>
         </div>
-        <button onClick={onSignOut} className="text-xs text-stone-400 underline hover:text-stone-200">
-          Sign out
-        </button>
+        {lastEarned !== null && lastEarned > 0 && (
+          <div className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-center text-sm text-amber-200 ring-1 ring-amber-400/20">
+            Last run earned <span className="font-bold">{CREDIT_SYMBOL} {formatCredits(lastEarned)}</span> credits
+          </div>
+        )}
       </div>
 
       {/* truck color */}

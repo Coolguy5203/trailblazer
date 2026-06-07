@@ -1,5 +1,6 @@
 "use client";
 import { useGame } from "@/lib/store";
+import { creditsEarned, formatCredits, CREDIT_SYMBOL } from "@/lib/economy";
 
 export default function HUD({ roomCode }: { roomCode?: string }) {
   const speed = useGame((s) => s.speedKmh);
@@ -7,6 +8,7 @@ export default function HUD({ roomCode }: { roomCode?: string }) {
   const distance = useGame((s) => s.distanceM);
   const jumps = useGame((s) => s.jumps);
   const bestAir = useGame((s) => s.bestAir);
+  const earned = creditsEarned(distance, jumps);
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none">
@@ -38,6 +40,12 @@ export default function HUD({ roomCode }: { roomCode?: string }) {
         <div className="flex justify-between gap-6">
           <span className="text-white/70">Best air</span>
           <span className="font-mono font-semibold">{bestAir.toFixed(1)}s</span>
+        </div>
+        <div className="mt-1 flex justify-between gap-6 border-t border-white/15 pt-1">
+          <span className="text-white/70">Earned</span>
+          <span className="font-mono font-semibold text-amber-300">
+            {CREDIT_SYMBOL} {formatCredits(earned)}
+          </span>
         </div>
         {roomCode && (
           <div className="mt-1 flex justify-between gap-6 border-t border-white/15 pt-1">

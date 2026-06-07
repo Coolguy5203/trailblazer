@@ -50,7 +50,7 @@ export async function loadCurrentProfile(): Promise<Profile | null> {
   if (!auth.user) return null;
   const { data, error } = await supabase
     .from("tb_profiles")
-    .select("id, username, distance_m, jumps, airtime_s, playtime_s")
+    .select("id, username, distance_m, jumps, airtime_s, playtime_s, credits")
     .eq("id", auth.user.id)
     .single();
   if (error || !data) return null;
