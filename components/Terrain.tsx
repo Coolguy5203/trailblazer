@@ -1,6 +1,6 @@
 "use client";
 import { useMemo } from "react";
-import { RigidBody, TrimeshCollider, CuboidCollider } from "@react-three/rapier";
+import { RigidBody, TrimeshCollider, CuboidCollider, BallCollider } from "@react-three/rapier";
 import { buildTerrain, PROPS, terrainHeight, HALF } from "@/lib/terrain";
 
 export default function Terrain() {
@@ -32,24 +32,26 @@ export default function Terrain() {
       {PROPS.map((p, i) => {
         const y = terrainHeight(p.x, p.z);
         if (p.type === "rock") {
+          // Rounded, partly-buried boulder: the wheels roll up and over it
+          // instead of slamming into a vertical wall.
           return (
-            <RigidBody key={i} type="fixed" colliders={false} position={[p.x, y + p.size * 0.4, p.z]} rotation={[0, p.rot, 0]}>
+            <RigidBody key={i} type="fixed" colliders={false} position={[p.x, y + p.size * 0.2, p.z]} rotation={[0, p.rot, 0]}>
               <mesh castShadow receiveShadow>
                 <dodecahedronGeometry args={[p.size, 0]} />
                 <meshStandardMaterial color="#857d70" roughness={1} flatShading />
               </mesh>
-              <CuboidCollider args={[p.size * 0.7, p.size * 0.6, p.size * 0.7]} />
+              <BallCollider args={[p.size * 0.88]} />
             </RigidBody>
           );
         }
-        // log
+        // log — lower & crossable; the truck climbs over with its long travel
         return (
-          <RigidBody key={i} type="fixed" colliders={false} position={[p.x, y + 0.6, p.z]} rotation={[0, p.rot, Math.PI / 2]}>
+          <RigidBody key={i} type="fixed" colliders={false} position={[p.x, y + 0.45, p.z]} rotation={[0, p.rot, Math.PI / 2]}>
             <mesh castShadow receiveShadow>
-              <cylinderGeometry args={[0.6, 0.6, p.size, 12]} />
+              <cylinderGeometry args={[0.45, 0.45, p.size, 12]} />
               <meshStandardMaterial color="#5b4631" roughness={1} />
             </mesh>
-            <CuboidCollider args={[0.6, p.size / 2, 0.6]} />
+            <CuboidCollider args={[0.45, p.size / 2, 0.45]} />
           </RigidBody>
         );
       })}

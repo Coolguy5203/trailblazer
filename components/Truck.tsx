@@ -13,11 +13,11 @@ const WHEELS = [
   { x: 1.05, y: -0.25, z: -1.55, steer: false }, // rear-left
   { x: -1.05, y: -0.25, z: -1.55, steer: false }, // rear-right
 ];
-const WHEEL_RADIUS = 0.55;
-const SUSPENSION_REST = 0.45;
+const WHEEL_RADIUS = 0.62; // taller tyres roll over obstacles more easily
+const SUSPENSION_REST = 0.55; // more ride height = ground clearance for crawling
 const MAX_STEER = 0.55;
-const ENGINE_FORCE = 1050; // per driven wheel (4WD)
-const MAX_SPEED = 26; // m/s (~94 km/h) soft cap
+const ENGINE_FORCE = 1350; // per driven wheel (4WD) — torque to climb
+const MAX_SPEED = 30; // m/s (~108 km/h) soft cap
 
 export interface TruckProps {
   spawn?: [number, number, number];
@@ -26,7 +26,7 @@ export interface TruckProps {
 }
 
 const Truck = forwardRef<RapierRigidBody, TruckProps>(function Truck(
-  { spawn = [0, 2.5, 0], color = "#c8512e", onFrame },
+  { spawn = [0, 3, 0], color = "#c8512e", onFrame },
   ref
 ) {
   const { world } = useRapier();
@@ -68,12 +68,12 @@ const Truck = forwardRef<RapierRigidBody, TruckProps>(function Truck(
       controller.addWheel({ x: w.x, y: w.y, z: w.z }, dir, axle, SUSPENSION_REST, WHEEL_RADIUS);
     });
     for (let i = 0; i < WHEELS.length; i++) {
-      controller.setWheelSuspensionStiffness(i, 24);
-      controller.setWheelMaxSuspensionTravel(i, 0.5);
+      controller.setWheelSuspensionStiffness(i, 28);
+      controller.setWheelMaxSuspensionTravel(i, 0.8); // long travel keeps wheels on the ground over bumps
       controller.setWheelSuspensionCompression(i, 0.9);
       controller.setWheelSuspensionRelaxation(i, 0.95);
-      controller.setWheelFrictionSlip(i, 2.2);
-      controller.setWheelMaxSuspensionForce(i, 60000);
+      controller.setWheelFrictionSlip(i, 3.4); // grip to crawl up rocks & steep faces
+      controller.setWheelMaxSuspensionForce(i, 90000);
       if (controller.setWheelSideFrictionStiffness) controller.setWheelSideFrictionStiffness(i, 1.0);
     }
     controllerRef.current = controller;
