@@ -48,6 +48,18 @@ const Truck = forwardRef<RapierRigidBody, TruckProps>(function Truck(
   useEffect(() => {
     const body = bodyRef.current;
     if (!body) return;
+
+    // Drop the centre of mass well below the chassis and give it strong pitch/roll
+    // inertia so engine torque at the contact patches can't flip the truck on
+    // acceleration, while still leaving yaw responsive enough to steer.
+    body.setAdditionalMassProperties(
+      1400,
+      { x: 0, y: -0.6, z: 0 }, // COM below the wheels
+      { x: 3200, y: 2400, z: 2800 }, // inertia: x=pitch, y=yaw, z=roll
+      { x: 0, y: 0, z: 0, w: 1 },
+      true
+    );
+
     const rawWorld: any = (world as any).raw ? (world as any).raw() : world;
     const controller = rawWorld.createVehicleController(body);
     const dir = { x: 0, y: -1, z: 0 };
@@ -172,10 +184,9 @@ const Truck = forwardRef<RapierRigidBody, TruckProps>(function Truck(
       }}
       colliders={false}
       position={spawn}
-      mass={1400}
       canSleep={false}
       linearDamping={0.05}
-      angularDamping={0.4}
+      angularDamping={0.5}
       friction={0.9}
     >
       {/* chassis collider (mass concentrated low for stability) */}

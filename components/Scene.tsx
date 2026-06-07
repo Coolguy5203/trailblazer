@@ -30,8 +30,8 @@ function FollowCamera({ target }: { target: React.MutableRefObject<RapierRigidBo
     const r = body.rotation();
     const q = new THREE.Quaternion(r.x, r.y, r.z, r.w);
 
-    // camera sits behind (+Z local) and above the truck
-    const offset = tmp.current.set(0, 4.2, 9).applyQuaternion(q);
+    // camera sits behind the truck (local -Z, the bed/tailgate side) and above
+    const offset = tmp.current.set(0, 3.8, -9).applyQuaternion(q);
     const desired = new THREE.Vector3(t.x + offset.x, t.y + offset.y, t.z + offset.z);
     const k = 1 - Math.pow(0.0015, dt); // frame-rate independent smoothing
     curPos.current.lerp(desired, k);
