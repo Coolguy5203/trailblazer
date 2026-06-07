@@ -16,8 +16,8 @@ const WHEELS = [
 const WHEEL_RADIUS = 0.62; // taller tyres roll over obstacles more easily
 const SUSPENSION_REST = 0.55; // more ride height = ground clearance for crawling
 const MAX_STEER = 0.55;
-const ENGINE_FORCE = 1350; // per driven wheel (4WD) — torque to climb
-const MAX_SPEED = 30; // m/s (~108 km/h) soft cap
+const ENGINE_FORCE = 1650; // per driven wheel (4WD) — more torque to climb/launch
+const MAX_SPEED = 34; // m/s (~122 km/h) soft cap — a bit more top end
 
 export interface TruckProps {
   spawn?: [number, number, number];
