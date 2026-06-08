@@ -43,6 +43,49 @@ function ramp(x: number, z: number, cx: number, cz: number, len: number, wid: nu
   return (rx / len) * h * smoothstep(wid, wid * 0.4, Math.abs(rz));
 }
 
+// --- Granite Ascent: an absolutely humongous mountain with a spiral switchback
+// trail cut into it. The cone face is a ~45° wall (unclimbable straight up), but
+// the carved road winds ~7 times around at a gentle 1–9° grade to a flat summit.
+const MTN = { x: -270, z: -270, R: 270, H: 255, turns: 7, rTop: 33, roadHalf: 10, roadBlend: 5 };
+
+export function spiralMountain(x: number, z: number): { hm: number; wm: number; road: number } {
+  const dx = x - MTN.x;
+  const dz = z - MTN.z;
+  const r = Math.hypot(dx, dz);
+  if (r > MTN.R) return { hm: 0, wm: 0, road: 0 };
+
+  // blend the mountain over the base terrain near its rim
+  const wm = smoothstep(MTN.R, MTN.R - 24, r);
+
+  // flat summit cap above the top of the trail
+  if (r <= MTN.rTop) return { hm: MTN.H * (1 - MTN.rTop / MTN.R), wm, road: 0 };
+
+  const coneH = MTN.H * (1 - r / MTN.R); // steep cone surface
+
+  // nearest spiral loop (loops are evenly spaced in radius)
+  let th = Math.atan2(dz, dx);
+  if (th < 0) th += Math.PI * 2;
+  let bestDr = Infinity;
+  let roadH = coneH;
+  for (let k = 0; k < MTN.turns; k++) {
+    const phi = th + Math.PI * 2 * k;
+    const rc = MTN.R - (MTN.R - MTN.rTop) * (phi / (Math.PI * 2 * MTN.turns));
+    if (rc < MTN.rTop || rc > MTN.R) continue;
+    const dr = Math.abs(r - rc);
+    if (dr < bestDr) {
+      bestDr = dr;
+      roadH = MTN.H * (1 - rc / MTN.R);
+    }
+  }
+
+  const road = smoothstep(MTN.roadHalf + MTN.roadBlend, MTN.roadHalf, bestDr);
+  // road cross-section: flat bench with a low berm at the edges to keep you on
+  const berm = 1.4 * Math.pow(Math.min(bestDr / MTN.roadHalf, 1), 2);
+  const surface = roadH + berm;
+  const hm = coneH * (1 - road) + surface * road;
+  return { hm, wm, road: road * wm };
+}
+
 /**
  * Terrain height at world (x, z). Built region-by-region across a huge world so
  * each area suits a different driving style. No real-world references.
@@ -60,10 +103,7 @@ export function terrainHeight(x: number, z: number): number {
   // ...and keep the Salt Pan Speedway near dead-flat for top speed
   h *= 1 - 0.9 * w(x, z, C.speedway);
 
-  // --- Granite Ascent: huge, steep, climbable mountain (Boulder's strength) ---
-  h += bump(x, z, C.ascent.x, C.ascent.z, C.ascent.radius * 0.95, 48);
-  h += bump(x, z, C.ascent.x - 55, C.ascent.z + 35, 60, 18);
-  h += bump(x, z, C.ascent.x + 45, C.ascent.z + 50, 50, 13);
+  // (Granite Ascent's humongous spiral mountain is blended in at the end.)
 
   // --- High Mesa: a big flat-topped plateau, fast and exposed up top ---
   h += plateau(x, z, C.mesa.x, C.mesa.z, C.mesa.radius * 0.95, 26);
@@ -113,7 +153,9 @@ export function terrainHeight(x: number, z: number): number {
   h += smoothstep(HALF - 70, HALF - 16, Math.abs(x)) * 18;
   h += smoothstep(HALF - 70, HALF - 16, Math.abs(z)) * 18;
 
-  return h;
+  // blend the humongous spiral mountain over the base terrain
+  const m = spiralMountain(x, z);
+  return h * (1 - m.wm) + m.hm * m.wm;
 }
 
 export interface TerrainData {
@@ -136,6 +178,7 @@ export function buildTerrain(): TerrainData {
   const high = new THREE.Color("#9aa861"); // dry grass
   const rock = new THREE.Color("#8a8276");
   const sand = new THREE.Color("#cdb079"); // dunes / salt pan
+  const roadCol = new THREE.Color("#a8895c"); // packed-dirt spiral trail
   const c = new THREE.Color();
 
   for (let i = 0; i < pos.count; i++) {
@@ -150,6 +193,8 @@ export function buildTerrain(): TerrainData {
     if (y > 16) c.lerp(rock, smoothstep(16, 28, y));
     const sandiness = Math.max(w(x, z, C.speedway), w(x, z, C.dunes) * 0.9);
     if (sandiness > 0) c.lerp(sand, sandiness * 0.7);
+    const road = spiralMountain(x, z).road;
+    if (road > 0) c.lerp(roadCol, road * 0.9);
     colors.push(c.r, c.g, c.b);
   }
   geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
@@ -185,11 +230,7 @@ export const PROPS: Prop[] = [
   { type: "rock", x: -392, z: 428, size: 1.3, rot: 1.9 },
   { type: "rock", x: -362, z: 416, size: 2.1, rot: 0.9 },
   { type: "log", x: -360, z: 396, size: 5.5, rot: 0.3 },
-  // Granite Ascent — boulders strewn on the lower slopes (around -340,-330)
-  { type: "rock", x: -250, z: -250, size: 2.2, rot: 0.4 },
-  { type: "rock", x: -300, z: -210, size: 1.8, rot: 1.3 },
-  { type: "rock", x: -210, z: -300, size: 2.0, rot: 2.1 },
-  { type: "rock", x: -420, z: -250, size: 1.7, rot: 0.5 },
+  // (Granite Ascent is the spiral mountain — no props on it, they'd block the trail)
   // Timber Hollow — fallen logs (around 300,-360)
   { type: "log", x: 290, z: -360, size: 6.5, rot: 0.4 },
   { type: "log", x: 318, z: -340, size: 6.0, rot: 1.2 },
