@@ -70,6 +70,41 @@ export async function purchaseItem(kind: "paint" | "truck", id: string): Promise
   return data as number;
 }
 
+// Record a time-trial finish (server validates + awards credits).
+export interface CourseResult {
+  awarded: number;
+  is_pb: boolean;
+  best_ms: number;
+}
+export async function finishCourse(courseId: string, ms: number): Promise<CourseResult> {
+  const { data, error } = await supabase.rpc("tb_finish_course", { p_course: courseId, p_ms: Math.round(ms) });
+  if (error) throw new Error("Could not save your time.");
+  return data as CourseResult;
+}
+
+// This player's best time per course → { courseId: best_ms }.
+export async function myCourseTimes(): Promise<Record<string, number>> {
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return {};
+  const { data } = await supabase
+    .from("tb_course_times")
+    .select("course_id, best_ms")
+    .eq("profile_id", auth.user.id);
+  const out: Record<string, number> = {};
+  (data ?? []).forEach((r: any) => (out[r.course_id] = r.best_ms));
+  return out;
+}
+
+export async function courseLeaderboard(courseId: string): Promise<{ username: string; best_ms: number }[]> {
+  const { data } = await supabase
+    .from("tb_course_times")
+    .select("username, best_ms")
+    .eq("course_id", courseId)
+    .order("best_ms", { ascending: true })
+    .limit(10);
+  return (data ?? []) as { username: string; best_ms: number }[];
+}
+
 // Persist accumulated session stats to the player's profile.
 export async function saveStats(delta: {
   distance_m: number;

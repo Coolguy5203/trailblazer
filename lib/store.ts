@@ -38,6 +38,21 @@ interface GameState {
   regionId: string | null;
   setRegionId: (id: string | null) => void;
 
+  // --- time-trial run state ---
+  courseId: string | null; // active course (null = free roam)
+  cpIndex: number; // next checkpoint to hit (0 = start line)
+  cpCount: number;
+  runState: "ready" | "running" | "finished";
+  startMs: number;
+  elapsedMs: number;
+  bestMs: number | null;
+  cpBearing: number; // radians, signed angle from truck heading to next checkpoint
+  startCourse: (id: string, cpCount: number, bestMs: number | null) => void;
+  passCheckpoint: (now: number) => void;
+  tickElapsed: (now: number) => void;
+  setBearing: (b: number) => void;
+  exitCourse: () => void;
+
   // app phase
   phase: "menu" | "driving";
   setPhase: (p: GameState["phase"]) => void;
@@ -61,6 +76,27 @@ export const useGame = create<GameState>((set) => ({
 
   regionId: null,
   setRegionId: (regionId) => set({ regionId }),
+
+  courseId: null,
+  cpIndex: 0,
+  cpCount: 0,
+  runState: "ready",
+  startMs: 0,
+  elapsedMs: 0,
+  bestMs: null,
+  cpBearing: 0,
+  startCourse: (courseId, cpCount, bestMs) =>
+    set({ courseId, cpCount, bestMs, cpIndex: 0, runState: "ready", startMs: 0, elapsedMs: 0, cpBearing: 0 }),
+  passCheckpoint: (now) =>
+    set((s) => {
+      if (!s.courseId || s.runState === "finished") return {};
+      if (s.cpIndex === 0) return { runState: "running", startMs: now, cpIndex: 1 };
+      if (s.cpIndex < s.cpCount - 1) return { cpIndex: s.cpIndex + 1 };
+      return { cpIndex: s.cpCount, runState: "finished", elapsedMs: now - s.startMs };
+    }),
+  tickElapsed: (now) => set((s) => (s.runState === "running" ? { elapsedMs: now - s.startMs } : {})),
+  setBearing: (cpBearing) => set({ cpBearing }),
+  exitCourse: () => set({ courseId: null, cpIndex: 0, cpCount: 0, runState: "ready", elapsedMs: 0, bestMs: null }),
 
   phase: "menu",
   setPhase: (phase) => set({ phase }),

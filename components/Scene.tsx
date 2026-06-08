@@ -6,6 +6,7 @@ import { Sky, Environment, AdaptiveDpr } from "@react-three/drei";
 import * as THREE from "three";
 import Terrain from "./Terrain";
 import Truck from "./Truck";
+import Checkpoints from "./Checkpoints";
 import { attachInput, setScheme } from "@/lib/input";
 import { useGame } from "@/lib/store";
 
@@ -130,11 +131,15 @@ interface SceneProps {
   color?: string;
   truckId?: string;
   spawn?: [number, number, number];
+  spawnYaw?: number;
   remotes?: RemotePlayer[];
+  checkpoints?: [number, number][];
+  cpIndex?: number;
+  cpColor?: string;
   onFrame?: (pos: THREE.Vector3, quat: THREE.Quaternion, speedKmh: number) => void;
 }
 
-export default function Scene({ color, truckId, spawn, remotes = [], onFrame }: SceneProps) {
+export default function Scene({ color, truckId, spawn, spawnYaw, remotes = [], checkpoints, cpIndex = 0, cpColor = "#7fdbff", onFrame }: SceneProps) {
   const chassis = useRef<RapierRigidBody | null>(null);
   const scheme = useGame((s) => s.scheme);
 
@@ -152,11 +157,15 @@ export default function Scene({ color, truckId, spawn, remotes = [], onFrame }: 
 
       <Physics gravity={[0, -20, 0]} timeStep={1 / 60}>
         <Terrain />
-        <Truck ref={chassis} truckId={truckId} color={color} spawn={spawn} onFrame={onFrame} />
+        <Truck ref={chassis} truckId={truckId} color={color} spawn={spawn} spawnYaw={spawnYaw} onFrame={onFrame} />
         {remotes.map((p) => (
           <RemoteTruck key={p.id} p={p} />
         ))}
       </Physics>
+
+      {checkpoints && checkpoints.length > 0 && (
+        <Checkpoints checkpoints={checkpoints} cpIndex={cpIndex} color={cpColor} />
+      )}
 
       <FollowCamera target={chassis} />
       <AdaptiveDpr pixelated />

@@ -12,12 +12,13 @@ const MAX_STEER = 0.55;
 export interface TruckProps {
   truckId?: string;
   spawn?: [number, number, number];
+  spawnYaw?: number;
   color?: string;
   onFrame?: (pos: THREE.Vector3, quat: THREE.Quaternion, speedKmh: number) => void;
 }
 
 const Truck = forwardRef<RapierRigidBody, TruckProps>(function Truck(
-  { truckId = "stock", spawn = [0, 3, 0], color = "#c8512e", onFrame },
+  { truckId = "stock", spawn = [0, 3, 0], spawnYaw = 0, color = "#c8512e", onFrame },
   ref
 ) {
   const spec: TruckSpec = useMemo(() => truckSpec(truckId), [truckId]);
@@ -181,6 +182,7 @@ const Truck = forwardRef<RapierRigidBody, TruckProps>(function Truck(
       }}
       colliders={false}
       position={spawn}
+      rotation={[0, spawnYaw, 0]}
       canSleep={false}
       linearDamping={0.05}
       angularDamping={0.5}

@@ -4,10 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type * as THREE from "three";
 import { useGame, type Profile, type ControlScheme } from "@/lib/store";
 import { signIn, signUp, signOut, loadCurrentProfile, saveStats, purchaseItem } from "@/lib/profile";
+import { finishCourse, myCourseTimes, courseLeaderboard, type CourseResult } from "@/lib/profile";
 import { useRoom, browsePublicRooms } from "@/lib/useRoom";
 import { creditsEarned, formatCredits, CREDIT_SYMBOL } from "@/lib/economy";
 import { BASIC_PAINTS, PREMIUM_PAINTS, TRUCKS, paintHex, type PaintOption } from "@/lib/shop";
 import { regionAt, regionInfo } from "@/lib/regions";
+import { COURSES, course as getCourse, checkpointY, formatTime, type Course } from "@/lib/courses";
 import HUD from "@/components/HUD";
 
 const Scene = dynamic(() => import("@/components/Scene"), { ssr: false });
@@ -21,12 +23,22 @@ export default function Page() {
   const [paintId, setPaintId] = useState("rust");
   const [truckId, setTruckId] = useState("stock");
   const [lastEarned, setLastEarned] = useState<number | null>(null);
+  const [spawn, setSpawn] = useState<[number, number, number]>([0, 3, 0]);
+  const [spawnYaw, setSpawnYaw] = useState(0);
+  const [courseResult, setCourseResult] = useState<CourseResult | null>(null);
+  const [courseTimes, setCourseTimes] = useState<Record<string, number>>({});
 
   const room = useRoom();
   const scheme = useGame((s) => s.scheme);
   const setScheme = useGame((s) => s.setScheme);
   const resetSession = useGame((s) => s.resetSession);
   const setRegionId = useGame((s) => s.setRegionId);
+  const startCourseStore = useGame((s) => s.startCourse);
+  const exitCourseStore = useGame((s) => s.exitCourse);
+  const runState = useGame((s) => s.runState);
+  const activeCourseId = useGame((s) => s.courseId);
+  const cpIndexLive = useGame((s) => s.cpIndex);
+  const activeCourse = getCourse(activeCourseId);
 
   // restore session on load
   useEffect(() => {
@@ -39,18 +51,53 @@ export default function Page() {
     });
   }, []);
 
+  // reload best times whenever we return to the menu with a profile
+  useEffect(() => {
+    if (screen === "menu" && profile) myCourseTimes().then(setCourseTimes);
+  }, [screen, profile]);
+
   const sessionStart = useRef(0);
   const startSession = useCallback(() => {
     resetSession();
+    exitCourseStore();
+    setCourseResult(null);
+    setSpawn([0, 3, 0]);
+    setSpawnYaw(0);
     setLastEarned(null);
     setRegionId(null); // so the first frame announces the region we spawn in
     sessionStart.current = performance.now();
     setScreen("driving");
-  }, [resetSession, setRegionId]);
+  }, [resetSession, setRegionId, exitCourseStore]);
+
+  const startChallenge = useCallback(
+    (c: Course) => {
+      resetSession();
+      setCourseResult(null);
+      setLastEarned(null);
+      setRegionId(null);
+      // spawn just behind the start gate, facing the second gate
+      const [c0x, c0z] = c.checkpoints[0];
+      const [c1x, c1z] = c.checkpoints[1];
+      let fx = c1x - c0x,
+        fz = c1z - c0z;
+      const len = Math.hypot(fx, fz) || 1;
+      fx /= len;
+      fz /= len;
+      const sx = c0x - fx * 11;
+      const sz = c0z - fz * 11;
+      setSpawn([sx, checkpointY(sx, sz) + 2.5, sz]);
+      setSpawnYaw(Math.atan2(fx, fz));
+      startCourseStore(c.id, c.checkpoints.length, courseTimes[c.id] ?? null);
+      sessionStart.current = performance.now();
+      setScreen("driving");
+    },
+    [resetSession, setRegionId, startCourseStore, courseTimes]
+  );
 
   const onLeaveDriving = useCallback(async () => {
     room.leave();
     const st = useGame.getState();
+    exitCourseStore();
     setLastEarned(creditsEarned(st.distanceM, st.jumps));
     const playtime = (performance.now() - sessionStart.current) / 1000;
     try {
@@ -63,18 +110,59 @@ export default function Page() {
     setScreen("menu");
   }, [room]);
 
-  // broadcast our pose to the lobby + detect region changes each frame
+  // broadcast our pose, detect region changes, and run the time-trial each frame
   const onFrame = useCallback(
     (pos: THREE.Vector3, quat: THREE.Quaternion) => {
       if (room.code) {
         room.sendPose([pos.x, pos.y, pos.z], [quat.x, quat.y, quat.z, quat.w]);
       }
-      const rid = regionAt(pos.x, pos.z)?.id ?? "wilds";
       const st = useGame.getState();
+      const rid = regionAt(pos.x, pos.z)?.id ?? "wilds";
       if (rid !== st.regionId) st.setRegionId(rid);
+
+      if (st.courseId && st.runState !== "finished") {
+        const c = getCourse(st.courseId);
+        if (c) {
+          const now = performance.now();
+          st.tickElapsed(now);
+          const idx = Math.min(st.cpIndex, c.checkpoints.length - 1);
+          const [cx, cz] = c.checkpoints[idx];
+          const gy = checkpointY(cx, cz);
+          const dxz = Math.hypot(pos.x - cx, pos.z - cz);
+          // y check stops gates on a different spiral loop (directly above/below) triggering
+          if (dxz < 8 && Math.abs(pos.y - gy) < 7) st.passCheckpoint(now);
+
+          // bearing from truck heading to the next gate (for the HUD arrow)
+          const fx = 2 * (quat.x * quat.z + quat.w * quat.y);
+          const fz = 1 - 2 * (quat.x * quat.x + quat.y * quat.y);
+          const dx = cx - pos.x,
+            dz = cz - pos.z;
+          st.setBearing(Math.atan2(fx * dz - fz * dx, fx * dx + fz * dz));
+        }
+      }
     },
     [room]
   );
+
+  // when a run finishes, save the time + award credits
+  useEffect(() => {
+    if (runState !== "finished" || !activeCourseId) return;
+    const ms = useGame.getState().elapsedMs;
+    let cancelled = false;
+    finishCourse(activeCourseId, ms)
+      .then(async (res) => {
+        if (cancelled) return;
+        setCourseResult(res);
+        const p = await loadCurrentProfile();
+        if (p) setProfile(p);
+      })
+      .catch(() => {
+        if (!cancelled) setCourseResult({ awarded: 0, is_pb: false, best_ms: ms });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runState, activeCourseId]);
 
   if (!booted) {
     return <div className="grid h-screen place-items-center bg-stone-900 text-stone-400">Loading…</div>;
@@ -83,9 +171,31 @@ export default function Page() {
   if (screen === "driving") {
     return (
       <main className="relative h-screen w-screen overflow-hidden bg-[#bcd4e6]">
-        <Scene color={paintHex(paintId)} truckId={truckId} remotes={room.remotes} onFrame={onFrame} />
+        <Scene
+          color={paintHex(paintId)}
+          truckId={truckId}
+          spawn={spawn}
+          spawnYaw={spawnYaw}
+          remotes={room.remotes}
+          checkpoints={activeCourse?.checkpoints}
+          cpIndex={cpIndexLive}
+          cpColor={activeCourse?.color}
+          onFrame={onFrame}
+        />
         <HUD roomCode={room.code ?? undefined} />
-        <RegionBanner />
+        {!activeCourse && <RegionBanner />}
+        {activeCourse && <CourseHUD course={activeCourse} />}
+        {courseResult && activeCourse && (
+          <CourseFinish
+            course={activeCourse}
+            result={courseResult}
+            onRetry={() => {
+              setCourseResult(null);
+              startChallenge(activeCourse);
+            }}
+            onExit={onLeaveDriving}
+          />
+        )}
         {room.code && (
           <div className="pointer-events-none absolute right-6 top-6 rounded-lg bg-black/35 px-3 py-2 text-sm text-white backdrop-blur">
             {room.memberCount} driver{room.memberCount === 1 ? "" : "s"} online
@@ -124,6 +234,8 @@ export default function Page() {
               const p = await loadCurrentProfile();
               if (p) setProfile(p);
             }}
+            courseTimes={courseTimes}
+            onChallenge={startChallenge}
             scheme={scheme}
             setScheme={setScheme}
             room={room}
@@ -220,6 +332,8 @@ function Menu({
   truckId,
   setTruckId,
   refreshProfile,
+  courseTimes,
+  onChallenge,
   scheme,
   setScheme,
   room,
@@ -233,6 +347,8 @@ function Menu({
   truckId: string;
   setTruckId: (id: string) => void;
   refreshProfile: () => Promise<void>;
+  courseTimes: Record<string, number>;
+  onChallenge: (c: Course) => void;
   scheme: ControlScheme;
   setScheme: (s: ControlScheme) => void;
   room: ReturnType<typeof useRoom>;
@@ -434,6 +550,47 @@ function Menu({
         ▶ FREE ROAM
       </button>
 
+      {/* challenges */}
+      <div className="rounded-xl bg-stone-800/60 p-4 ring-1 ring-white/10">
+        <div className="mb-3 text-sm font-semibold text-stone-300">Time trials</div>
+        <div className="space-y-2">
+          {COURSES.map((c) => {
+            const best = courseTimes[c.id];
+            return (
+              <div key={c.id} className="rounded-lg bg-stone-900 p-3 ring-1 ring-white/5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{c.name}</span>
+                      <span className="text-[10px] uppercase tracking-wide text-stone-500">{c.region}</span>
+                    </div>
+                    <div className="truncate text-xs text-stone-400">{c.tagline}</div>
+                    <div className="mt-1 text-xs">
+                      <span className="text-stone-500">Best </span>
+                      <span className="font-mono text-cyan-300">{best ? formatTime(best) : "—"}</span>
+                      <span className="text-stone-500"> · reward </span>
+                      <span className="text-amber-300">
+                        {CREDIT_SYMBOL}
+                        {formatCredits(c.reward)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="relative flex shrink-0 flex-col items-stretch gap-1">
+                    <button
+                      onClick={() => onChallenge(c)}
+                      className="rounded-md bg-cyan-500 px-4 py-1.5 text-xs font-bold text-black transition hover:brightness-110"
+                    >
+                      Race
+                    </button>
+                    <Leaderboard courseId={c.id} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* multiplayer */}
       <div className="rounded-xl bg-stone-800/60 p-4 ring-1 ring-white/10">
         <div className="mb-3 text-sm font-semibold text-stone-300">Play with friends</div>
@@ -484,6 +641,114 @@ function Menu({
 
       {err && <p className="text-center text-sm text-red-400">{err}</p>}
     </div>
+  );
+}
+
+function CourseHUD({ course }: { course: Course }) {
+  const elapsed = useGame((s) => s.elapsedMs);
+  const cpIndex = useGame((s) => s.cpIndex);
+  const runState = useGame((s) => s.runState);
+  const best = useGame((s) => s.bestMs);
+  const bearing = useGame((s) => s.cpBearing);
+  const total = course.checkpoints.length;
+
+  return (
+    <div className="pointer-events-none absolute left-1/2 top-16 flex -translate-x-1/2 flex-col items-center">
+      <div className="rounded-xl bg-black/45 px-6 py-2 text-center backdrop-blur">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-300">{course.name}</div>
+        <div className="font-mono text-4xl font-bold tabular-nums text-white">{formatTime(elapsed)}</div>
+        <div className="text-xs text-white/70">
+          {runState === "ready" ? "Cross the start gate to begin" : `Gate ${Math.min(cpIndex, total)} / ${total}`}
+          {best != null && <> · Best {formatTime(best)}</>}
+        </div>
+      </div>
+      {runState !== "finished" && (
+        <div className="mt-3" style={{ transform: `rotate(${bearing}rad)` }}>
+          <svg viewBox="0 0 24 24" className="h-10 w-10 fill-cyan-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">
+            <path d="M12 2l7 19-7-4.2L5 21z" />
+          </svg>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CourseFinish({
+  course,
+  result,
+  onRetry,
+  onExit,
+}: {
+  course: Course;
+  result: CourseResult;
+  onRetry: () => void;
+  onExit: () => void;
+}) {
+  const elapsed = useGame((s) => s.elapsedMs);
+  return (
+    <div className="absolute inset-0 grid place-items-center bg-black/55 backdrop-blur-sm">
+      <div className="w-80 rounded-2xl bg-stone-900 p-6 text-center ring-1 ring-white/10">
+        <div className="text-xs font-semibold uppercase tracking-widest text-cyan-300">{course.name} — finished</div>
+        <div className="my-2 font-mono text-5xl font-bold text-white">{formatTime(elapsed)}</div>
+        {result.is_pb && (
+          <div className="mb-2 inline-block rounded bg-cyan-400 px-2 py-0.5 text-xs font-bold text-black">
+            NEW PERSONAL BEST
+          </div>
+        )}
+        <div className="mb-4 text-sm text-amber-300">
+          {result.awarded > 0
+            ? `+${formatCredits(result.awarded)} ${CREDIT_SYMBOL} credits`
+            : "Beat your best time to earn more credits"}
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onRetry} className="flex-1 rounded-lg bg-cyan-500 py-2.5 font-bold text-black transition hover:brightness-110">
+            Retry
+          </button>
+          <button onClick={onExit} className="flex-1 rounded-lg bg-stone-700 py-2.5 font-semibold text-white transition hover:bg-stone-600">
+            Garage
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Leaderboard({ courseId }: { courseId: string }) {
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<{ username: string; best_ms: number }[] | null>(null);
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && rows === null) courseLeaderboard(courseId).then(setRows);
+  };
+  return (
+    <>
+      <button
+        onClick={toggle}
+        className="rounded-md bg-stone-700 px-4 py-1 text-xs font-semibold text-stone-200 transition hover:bg-stone-600"
+      >
+        🏆
+      </button>
+      {open && (
+        <div className="absolute right-0 z-10 mt-1 w-52 rounded-lg bg-stone-950 p-3 text-left text-xs ring-1 ring-white/10 shadow-xl">
+          <div className="mb-1 font-semibold text-stone-300">Top times</div>
+          {rows === null ? (
+            <div className="text-stone-500">Loading…</div>
+          ) : rows.length === 0 ? (
+            <div className="text-stone-500">No times yet — be the first!</div>
+          ) : (
+            rows.map((r, i) => (
+              <div key={i} className="flex justify-between py-0.5">
+                <span className="text-stone-400">
+                  {i + 1}. {r.username}
+                </span>
+                <span className="font-mono text-cyan-300">{formatTime(r.best_ms)}</span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
