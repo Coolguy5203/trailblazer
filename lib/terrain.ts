@@ -46,7 +46,8 @@ function ramp(x: number, z: number, cx: number, cz: number, len: number, wid: nu
 // --- Granite Ascent: an absolutely humongous mountain with a spiral switchback
 // trail cut into it. The cone face is a ~45° wall (unclimbable straight up), but
 // the carved road winds ~7 times around at a gentle 1–9° grade to a flat summit.
-const MTN = { x: -270, z: -270, R: 270, H: 255, turns: 7, rTop: 33, roadHalf: 10, roadBlend: 5 };
+// phase = π/4 puts the trail entrance on the NE face, pointing back at Home Flats.
+const MTN = { x: -270, z: -270, R: 270, H: 255, turns: 7, rTop: 33, roadHalf: 12, roadBlend: 5, phase: Math.PI / 4 };
 
 export function spiralMountain(x: number, z: number): { hm: number; wm: number; road: number } {
   const dx = x - MTN.x;
@@ -63,8 +64,8 @@ export function spiralMountain(x: number, z: number): { hm: number; wm: number; 
   const coneH = MTN.H * (1 - r / MTN.R); // steep cone surface
 
   // nearest spiral loop (loops are evenly spaced in radius)
-  let th = Math.atan2(dz, dx);
-  if (th < 0) th += Math.PI * 2;
+  let th = Math.atan2(dz, dx) - MTN.phase;
+  th = ((th % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
   let bestDr = Infinity;
   let roadH = coneH;
   for (let k = 0; k < MTN.turns; k++) {
@@ -78,9 +79,15 @@ export function spiralMountain(x: number, z: number): { hm: number; wm: number; 
     }
   }
 
-  const road = smoothstep(MTN.roadHalf + MTN.roadBlend, MTN.roadHalf, bestDr);
+  // Flare the trail into a broad, easy on-ramp at the home-facing base so it's
+  // simple to find and get onto; taper to normal width as you climb.
+  const thPi = th > Math.PI ? th - Math.PI * 2 : th; // -π..π from the entrance
+  const entrance = smoothstep(0.7, 0.15, Math.abs(thPi)) * smoothstep(MTN.R * 0.62, MTN.R, r);
+  const roadHalf = MTN.roadHalf + 12 * entrance;
+
+  const road = smoothstep(roadHalf + MTN.roadBlend, roadHalf, bestDr);
   // road cross-section: flat bench with a low berm at the edges to keep you on
-  const berm = 1.4 * Math.pow(Math.min(bestDr / MTN.roadHalf, 1), 2);
+  const berm = 1.4 * Math.pow(Math.min(bestDr / roadHalf, 1), 2);
   const surface = roadH + berm;
   const hm = coneH * (1 - road) + surface * road;
   return { hm, wm, road: road * wm };
