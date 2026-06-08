@@ -1,9 +1,9 @@
 import * as THREE from "three";
 import { REGIONS, type Region } from "./regions";
 
-// --- Map dimensions (large, multi-region world) ---
-export const MAP_SIZE = 440; // world units, square, centered on origin
-export const SEGMENTS = 220; // grid resolution for visuals + physics trimesh
+// --- Map dimensions (HUGE multi-region world) ---
+export const MAP_SIZE = 1200; // world units, square, centered on origin
+export const SEGMENTS = 320; // grid resolution (cell ~3.75u) for visuals + physics trimesh
 export const HALF = MAP_SIZE / 2;
 
 const C: Record<string, Region> = Object.fromEntries(REGIONS.map((r) => [r.id, r]));
@@ -21,6 +21,13 @@ function bump(x: number, z: number, cx: number, cz: number, r: number, h: number
   return h * t * t * (3 - 2 * t);
 }
 
+// Flat-topped plateau: full height inside ~0.72r, sloping to 0 at r.
+function plateau(x: number, z: number, cx: number, cz: number, r: number, h: number) {
+  const d = Math.hypot(x - cx, z - cz);
+  if (d > r) return 0;
+  return h * smoothstep(r, r * 0.72, d);
+}
+
 // Region influence weight: ~1 across the inner area, feathering to 0 at the edge.
 function w(x: number, z: number, reg: Region) {
   const d = Math.hypot(x - reg.x, z - reg.z);
@@ -28,7 +35,7 @@ function w(x: number, z: number, reg: Region) {
   return smoothstep(reg.radius, reg.radius * 0.25, d);
 }
 
-// A simple wedge ramp rising along +x within a small footprint.
+// A wedge ramp rising along +x within a small footprint.
 function ramp(x: number, z: number, cx: number, cz: number, len: number, wid: number, h: number) {
   const rx = x - cx,
     rz = z - cz;
@@ -37,62 +44,74 @@ function ramp(x: number, z: number, cx: number, cz: number, len: number, wid: nu
 }
 
 /**
- * Terrain height at world (x, z). Built region-by-region so each area suits a
- * different driving style: flat speedway, steep climb, rolling dunes, technical
- * ridge, rock basin, timber hollow and a ramp park. No real-world references.
+ * Terrain height at world (x, z). Built region-by-region across a huge world so
+ * each area suits a different driving style. No real-world references.
  */
 export function terrainHeight(x: number, z: number): number {
   const dHome = Math.hypot(x - C.home.x, z - C.home.z);
 
-  // gentle global rolling base
+  // gentle, long-wavelength global rolling base
   let h =
-    Math.sin(x * 0.04) * Math.cos(z * 0.038) * 2.4 +
-    Math.sin(x * 0.085 + 1.3) * Math.cos(z * 0.075) * 1.2;
+    Math.sin(x * 0.02) * Math.cos(z * 0.018) * 3.2 +
+    Math.sin(x * 0.045 + 1.3) * Math.cos(z * 0.04) * 1.6;
 
   // flatten the home pad...
-  h *= smoothstep(10, 38, dHome);
+  h *= smoothstep(14, 50, dHome);
   // ...and keep the Salt Pan Speedway near dead-flat for top speed
   h *= 1 - 0.9 * w(x, z, C.speedway);
 
-  // --- Granite Ascent: tall, steep, climbable massif (Boulder's strength) ---
-  h += bump(x, z, C.ascent.x, C.ascent.z, C.ascent.radius * 0.95, 34);
-  h += bump(x, z, C.ascent.x - 28, C.ascent.z + 18, 30, 12); // secondary peak
-  h += bump(x, z, C.ascent.x + 22, C.ascent.z + 26, 26, 9);
+  // --- Granite Ascent: huge, steep, climbable mountain (Boulder's strength) ---
+  h += bump(x, z, C.ascent.x, C.ascent.z, C.ascent.radius * 0.95, 48);
+  h += bump(x, z, C.ascent.x - 55, C.ascent.z + 35, 60, 18);
+  h += bump(x, z, C.ascent.x + 45, C.ascent.z + 50, 50, 13);
+
+  // --- High Mesa: a big flat-topped plateau, fast and exposed up top ---
+  h += plateau(x, z, C.mesa.x, C.mesa.z, C.mesa.radius * 0.95, 26);
+
+  // --- Echo Canyon: a valley floor flanked by raised walls ---
+  {
+    h += -bump(x, z, C.canyon.x, C.canyon.z, C.canyon.radius * 0.8, 11);
+    h += bump(x, z, C.canyon.x, C.canyon.z - 80, 55, 20);
+    h += bump(x, z, C.canyon.x, C.canyon.z + 80, 55, 20);
+  }
 
   // --- The Dune Sea: big rolling waves for speed + air ---
   {
     const wd = w(x, z, C.dunes);
     if (wd > 0) {
-      const dune = Math.sin(x * 0.11) * 4.2 + Math.sin((x + z) * 0.07 + 1.0) * 3.0 + Math.cos(z * 0.13) * 2.0;
+      const dune = Math.sin(x * 0.09) * 5.2 + Math.sin((x + z) * 0.06 + 1.0) * 3.6 + Math.cos(z * 0.1) * 2.4;
       h += dune * wd;
     }
   }
 
   // --- Switchback Ridge: clustered medium hills, twisty technical lines ---
-  h += bump(x, z, C.ridge.x + 18, C.ridge.z - 16, 30, 11);
-  h += bump(x, z, C.ridge.x - 20, C.ridge.z + 14, 28, 9);
-  h += bump(x, z, C.ridge.x + 4, C.ridge.z + 30, 24, 7);
-  h += bump(x, z, C.ridge.x - 30, C.ridge.z - 24, 22, 6);
+  h += bump(x, z, C.ridge.x + 34, C.ridge.z - 30, 55, 16);
+  h += bump(x, z, C.ridge.x - 38, C.ridge.z + 26, 50, 13);
+  h += bump(x, z, C.ridge.x + 8, C.ridge.z + 52, 44, 10);
+  h += bump(x, z, C.ridge.x - 52, C.ridge.z - 44, 40, 9);
 
   // --- Timber Hollow: moderate rolling humps (logs are props) ---
-  h += bump(x, z, C.timber.x + 14, C.timber.z + 12, 30, 6.5);
-  h += bump(x, z, C.timber.x - 22, C.timber.z - 10, 26, 5.5);
+  h += bump(x, z, C.timber.x + 28, C.timber.z + 22, 58, 8);
+  h += bump(x, z, C.timber.x - 40, C.timber.z - 18, 50, 7);
 
   // --- Boulder Basin: shallow bowl so boulders sit in a pit ---
-  h += -bump(x, z, C.basin.x, C.basin.z, C.basin.radius * 0.9, 6.0);
+  h += -bump(x, z, C.basin.x, C.basin.z, C.basin.radius * 0.9, 7.0);
 
   // --- The Proving Grounds: a few terrain kickers/ramps ---
-  h += ramp(x, z, C.proving.x - 24, C.proving.z - 6, 16, 5, 6.0);
-  h += ramp(x, z, C.proving.x + 2, C.proving.z + 14, 14, 4.5, 5.0);
-  h += ramp(x, z, C.proving.x + 20, C.proving.z - 18, 18, 5, 7.0);
+  h += ramp(x, z, C.proving.x - 40, C.proving.z - 10, 22, 7, 7.0);
+  h += ramp(x, z, C.proving.x + 4, C.proving.z + 24, 20, 6, 6.0);
+  h += ramp(x, z, C.proving.x + 34, C.proving.z - 30, 24, 7, 8.0);
 
-  // --- a couple of standalone hills out in the backcountry ---
-  h += bump(x, z, 175, -150, 40, 10);
-  h += bump(x, z, 160, 170, 30, 7);
+  // --- standalone hills out in the backcountry to break up the open space ---
+  h += bump(x, z, 470, -460, 90, 16);
+  h += bump(x, z, 480, 470, 70, 12);
+  h += bump(x, z, -470, -480, 80, 14);
+  h += bump(x, z, 150, -150, 55, 7);
+  h += bump(x, z, -120, 120, 50, 6);
 
   // raised rim border so the map has a soft natural edge
-  h += smoothstep(HALF - 34, HALF - 8, Math.abs(x)) * 14;
-  h += smoothstep(HALF - 34, HALF - 8, Math.abs(z)) * 14;
+  h += smoothstep(HALF - 70, HALF - 16, Math.abs(x)) * 18;
+  h += smoothstep(HALF - 70, HALF - 16, Math.abs(z)) * 18;
 
   return h;
 }
@@ -125,11 +144,10 @@ export function buildTerrain(): TerrainData {
     const y = terrainHeight(x, z);
     pos.setY(i, y);
 
-    const t = THREE.MathUtils.clamp((y + 3) / 18, 0, 1);
+    const t = THREE.MathUtils.clamp((y + 4) / 26, 0, 1);
     if (t < 0.45) c.copy(low).lerp(mid, t / 0.45);
     else c.copy(mid).lerp(high, (t - 0.45) / 0.55);
-    if (y > 11) c.lerp(rock, smoothstep(11, 18, y));
-    // tint sandy regions (speedway + dunes)
+    if (y > 16) c.lerp(rock, smoothstep(16, 28, y));
     const sandiness = Math.max(w(x, z, C.speedway), w(x, z, C.dunes) * 0.9);
     if (sandiness > 0) c.lerp(sand, sandiness * 0.7);
     colors.push(c.r, c.g, c.b);
@@ -156,29 +174,35 @@ export interface Prop {
 
 export const PROPS: Prop[] = [
   // near home — easy first obstacles
-  { type: "rock", x: 18, z: -16, size: 1.3, rot: 0.3 },
-  { type: "rock", x: -22, z: 14, size: 1.6, rot: 1.1 },
-  { type: "log", x: 14, z: 24, size: 5.0, rot: 0.5 },
-  // Boulder Basin rock garden cluster
-  { type: "rock", x: -140, z: 150, size: 1.6, rot: 0.2 },
-  { type: "rock", x: -152, z: 160, size: 2.2, rot: 1.0 },
-  { type: "rock", x: -160, z: 152, size: 1.4, rot: 2.4 },
-  { type: "rock", x: -146, z: 168, size: 1.8, rot: 0.6 },
-  { type: "rock", x: -158, z: 170, size: 1.3, rot: 1.9 },
-  { type: "rock", x: -150, z: 144, size: 2.0, rot: 0.9 },
-  { type: "log", x: -138, z: 166, size: 5.0, rot: 0.3 },
-  // Granite Ascent — boulders strewn on the lower slopes
-  { type: "rock", x: -100, z: -100, size: 2.0, rot: 0.4 },
-  { type: "rock", x: -150, z: -95, size: 1.7, rot: 1.3 },
-  { type: "rock", x: -95, z: -150, size: 1.9, rot: 2.1 },
-  // Timber Hollow — fallen logs
-  { type: "log", x: 95, z: -140, size: 6.0, rot: 0.4 },
-  { type: "log", x: 110, z: -125, size: 5.5, rot: 1.2 },
-  { type: "log", x: 85, z: -155, size: 6.5, rot: -0.3 },
-  { type: "log", x: 120, z: -150, size: 5.0, rot: 1.9 },
-  { type: "rock", x: 105, z: -160, size: 1.5, rot: 0.7 },
-  // Switchback Ridge — a few rocks on the trail
-  { type: "rock", x: -150, z: 55, size: 1.6, rot: 1.1 },
-  { type: "log", x: -165, z: 70, size: 5.0, rot: 0.6 },
-  { type: "rock", x: -140, z: 80, size: 1.4, rot: 2.0 },
+  { type: "rock", x: 20, z: -18, size: 1.3, rot: 0.3 },
+  { type: "rock", x: -24, z: 16, size: 1.6, rot: 1.1 },
+  { type: "log", x: 16, z: 28, size: 5.0, rot: 0.5 },
+  // Boulder Basin rock garden cluster (around -380, 410)
+  { type: "rock", x: -370, z: 400, size: 1.6, rot: 0.2 },
+  { type: "rock", x: -388, z: 412, size: 2.4, rot: 1.0 },
+  { type: "rock", x: -398, z: 402, size: 1.5, rot: 2.4 },
+  { type: "rock", x: -376, z: 424, size: 1.9, rot: 0.6 },
+  { type: "rock", x: -392, z: 428, size: 1.3, rot: 1.9 },
+  { type: "rock", x: -362, z: 416, size: 2.1, rot: 0.9 },
+  { type: "log", x: -360, z: 396, size: 5.5, rot: 0.3 },
+  // Granite Ascent — boulders strewn on the lower slopes (around -340,-330)
+  { type: "rock", x: -250, z: -250, size: 2.2, rot: 0.4 },
+  { type: "rock", x: -300, z: -210, size: 1.8, rot: 1.3 },
+  { type: "rock", x: -210, z: -300, size: 2.0, rot: 2.1 },
+  { type: "rock", x: -420, z: -250, size: 1.7, rot: 0.5 },
+  // Timber Hollow — fallen logs (around 300,-360)
+  { type: "log", x: 290, z: -360, size: 6.5, rot: 0.4 },
+  { type: "log", x: 318, z: -340, size: 6.0, rot: 1.2 },
+  { type: "log", x: 274, z: -384, size: 7.0, rot: -0.3 },
+  { type: "log", x: 336, z: -372, size: 5.5, rot: 1.9 },
+  { type: "rock", x: 308, z: -396, size: 1.6, rot: 0.7 },
+  { type: "log", x: 256, z: -344, size: 6.0, rot: 0.9 },
+  // Switchback Ridge — rocks on the trail (around -390,170)
+  { type: "rock", x: -380, z: 160, size: 1.7, rot: 1.1 },
+  { type: "log", x: -410, z: 188, size: 5.5, rot: 0.6 },
+  { type: "rock", x: -360, z: 196, size: 1.5, rot: 2.0 },
+  // Echo Canyon floor — a few boulders (around 410,-170)
+  { type: "rock", x: 400, z: -170, size: 1.9, rot: 0.8 },
+  { type: "rock", x: 424, z: -156, size: 1.5, rot: 1.6 },
+  { type: "rock", x: 410, z: -188, size: 2.0, rot: 0.2 },
 ];

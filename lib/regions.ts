@@ -9,15 +9,18 @@ export interface Region {
   radius: number;
 }
 
+// Spread across the huge 1200u world.
 export const REGIONS: Region[] = [
-  { id: "home", name: "Home Flats", tagline: "Where every trail begins", x: 0, z: 0, radius: 44 },
-  { id: "speedway", name: "Salt Pan Speedway", tagline: "Wide open — let a fast rig fly", x: 150, z: 0, radius: 82 },
-  { id: "ascent", name: "Granite Ascent", tagline: "Steep granite — bring the torque", x: -130, z: -130, radius: 88 },
-  { id: "dunes", name: "The Dune Sea", tagline: "Roll the waves, catch big air", x: 5, z: 160, radius: 80 },
-  { id: "ridge", name: "Switchback Ridge", tagline: "Twisty and technical — all-rounder turf", x: -155, z: 60, radius: 72 },
-  { id: "basin", name: "Boulder Basin", tagline: "Crawl the rock garden", x: -150, z: 160, radius: 56 },
-  { id: "timber", name: "Timber Hollow", tagline: "Mind the fallen logs", x: 100, z: -140, radius: 74 },
-  { id: "proving", name: "The Proving Grounds", tagline: "Ramps and kickers — send it", x: 75, z: 100, radius: 54 },
+  { id: "home", name: "Home Flats", tagline: "Where every trail begins", x: 0, z: 0, radius: 55 },
+  { id: "speedway", name: "Salt Pan Speedway", tagline: "Wide open — let a fast rig fly", x: 360, z: 10, radius: 150 },
+  { id: "ascent", name: "Granite Ascent", tagline: "Steep granite — bring the torque", x: -340, z: -330, radius: 175 },
+  { id: "dunes", name: "The Dune Sea", tagline: "Roll the waves, catch big air", x: 30, z: 380, radius: 160 },
+  { id: "ridge", name: "Switchback Ridge", tagline: "Twisty and technical — all-rounder turf", x: -390, z: 170, radius: 150 },
+  { id: "basin", name: "Boulder Basin", tagline: "Crawl the rock garden", x: -380, z: 410, radius: 105 },
+  { id: "timber", name: "Timber Hollow", tagline: "Mind the fallen logs", x: 300, z: -360, radius: 150 },
+  { id: "proving", name: "The Proving Grounds", tagline: "Ramps and kickers — send it", x: 210, z: 250, radius: 115 },
+  { id: "canyon", name: "Echo Canyon", tagline: "Wind through the carved walls", x: 410, z: -170, radius: 135 },
+  { id: "mesa", name: "High Mesa", tagline: "Up top — flat, fast and exposed", x: -160, z: -430, radius: 145 },
 ];
 
 export const WILDS = { id: "wilds", name: "The Backcountry", tagline: "Uncharted territory" };

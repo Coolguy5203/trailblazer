@@ -17,6 +17,47 @@ export interface RemotePlayer {
   quat: [number, number, number, number];
 }
 
+// Directional "sun" whose shadow frustum follows the player, so shadows stay
+// crisp anywhere on the huge map without a giant shadow texture.
+function SunLight({ target }: { target: React.MutableRefObject<RapierRigidBody | null> }) {
+  const light = useRef<THREE.DirectionalLight>(null);
+  const tgt = useRef(new THREE.Object3D());
+  const { scene } = useThree();
+
+  useEffect(() => {
+    scene.add(tgt.current);
+    return () => {
+      scene.remove(tgt.current);
+    };
+  }, [scene]);
+
+  useFrame(() => {
+    const b = target.current;
+    const l = light.current;
+    if (!b || !l) return;
+    const t = b.translation();
+    l.position.set(t.x + 90, t.y + 150, t.z + 70);
+    tgt.current.position.set(t.x, t.y, t.z);
+    l.target = tgt.current;
+  });
+
+  return (
+    <directionalLight
+      ref={light}
+      castShadow
+      intensity={2.1}
+      shadow-mapSize={[2048, 2048]}
+      shadow-camera-left={-90}
+      shadow-camera-right={90}
+      shadow-camera-top={90}
+      shadow-camera-bottom={-90}
+      shadow-camera-near={1}
+      shadow-camera-far={420}
+      shadow-bias={-0.0004}
+    />
+  );
+}
+
 function FollowCamera({ target }: { target: React.MutableRefObject<RapierRigidBody | null> }) {
   const { camera } = useThree();
   const curPos = useRef(new THREE.Vector3(0, 8, 14));
@@ -101,24 +142,12 @@ export default function Scene({ color, truckId, spawn, remotes = [], onFrame }: 
   useEffect(() => setScheme(scheme), [scheme]);
 
   return (
-    <Canvas shadows camera={{ position: [0, 8, 14], fov: 60, near: 0.3, far: 1400 }} dpr={[1, 1.75]}>
+    <Canvas shadows camera={{ position: [0, 8, 14], fov: 60, near: 0.3, far: 3500 }} dpr={[1, 1.75]}>
       <color attach="background" args={["#bcd4e6"]} />
-      <fog attach="fog" args={["#bcd4e6", 140, 560]} />
+      <fog attach="fog" args={["#bcd4e6", 260, 1150]} />
       <Sky sunPosition={[120, 80, 40]} turbidity={6} rayleigh={1.2} />
       <hemisphereLight intensity={0.6} groundColor="#5a4a32" color="#cfe3f2" />
-      <directionalLight
-        castShadow
-        position={[140, 180, 90]}
-        intensity={2.1}
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-220}
-        shadow-camera-right={220}
-        shadow-camera-top={220}
-        shadow-camera-bottom={-220}
-        shadow-camera-near={1}
-        shadow-camera-far={520}
-        shadow-bias={-0.0004}
-      />
+      <SunLight target={chassis} />
       <Environment preset="park" />
 
       <Physics gravity={[0, -20, 0]} timeStep={1 / 60}>
