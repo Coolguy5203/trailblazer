@@ -13,16 +13,17 @@ import { COURSES, course as getCourse, checkpointY, formatTime, type Course } fr
 import { CHAPTERS, chapter as getChapter, objectiveGoal, type Chapter } from "@/lib/story";
 import { completeChapter } from "@/lib/profile";
 import HUD from "@/components/HUD";
+import TouchControls from "@/components/TouchControls";
 
 const STORY_COLOR = "#5ad1ff";
 
 const Scene = dynamic(() => import("@/components/Scene"), { ssr: false });
 
-type Screen = "auth" | "menu" | "driving";
+type Screen = "landing" | "auth" | "menu" | "driving";
 
 export default function Page() {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [screen, setScreen] = useState<Screen>("auth");
+  const [screen, setScreen] = useState<Screen>("landing");
   const [booted, setBooted] = useState(false);
   const [paintId, setPaintId] = useState("rust");
   const [truckId, setTruckId] = useState("stock");
@@ -58,6 +59,8 @@ export default function Page() {
       if (p) {
         setProfile(p);
         setScreen("menu");
+      } else {
+        setScreen("landing");
       }
       setBooted(true);
     });
@@ -252,6 +255,10 @@ export default function Page() {
     return <div className="grid h-screen place-items-center bg-stone-900 text-stone-400">Loading…</div>;
   }
 
+  if (screen === "landing") {
+    return <Landing onPlay={() => setScreen("auth")} />;
+  }
+
   if (screen === "driving") {
     return (
       <main className="relative h-screen w-screen overflow-hidden bg-[#bcd4e6]">
@@ -309,6 +316,7 @@ export default function Page() {
         >
           ‹ Garage
         </button>
+        <TouchControls />
       </main>
     );
   }
@@ -319,6 +327,7 @@ export default function Page() {
         <Header />
         {screen === "auth" ? (
           <AuthForm
+            onBack={() => setScreen("landing")}
             onAuthed={(p) => {
               setProfile(p);
               setScreen("menu");
@@ -347,7 +356,7 @@ export default function Page() {
             onSignOut={async () => {
               await signOut();
               setProfile(null);
-              setScreen("auth");
+              setScreen("landing");
             }}
           />
         )}
@@ -367,7 +376,75 @@ function Header() {
   );
 }
 
-function AuthForm({ onAuthed }: { onAuthed: (p: Profile) => void }) {
+function Landing({ onPlay }: { onPlay: () => void }) {
+  const features = [
+    { icon: "🏔️", title: "A Huge Open World", desc: "1,700m of dunes, canyons, forests and a spiral-road mountain to summit." },
+    { icon: "🚙", title: "Real Off-Road Physics", desc: "Raycast suspension, grip and momentum. Three trucks, each with its own feel." },
+    { icon: "📖", title: "Story Campaign", desc: "Seven chapters charting the frontier — climb, collect, jump and race." },
+    { icon: "⏱️", title: "Time Trials", desc: "Checkpoint courses with credit rewards and global leaderboards." },
+    { icon: "🤝", title: "Play With Friends", desc: "Spin up a public lobby and share a code to drive together in real time." },
+    { icon: "🎨", title: "Earn & Customize", desc: "Bank credits, buy premium paints and unlock new vehicles." },
+  ];
+  return (
+    <main className="h-screen overflow-y-auto bg-gradient-to-b from-sky-950 via-stone-900 to-black text-stone-100">
+      <div className="mx-auto max-w-3xl px-6 py-12 sm:py-20">
+        <div className="text-center">
+          <div className="mb-4 inline-block rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-amber-300 ring-1 ring-amber-400/30">
+            Free · plays in your browser
+          </div>
+          <h1 className="bg-gradient-to-r from-amber-300 to-orange-500 bg-clip-text text-6xl font-black tracking-tight text-transparent sm:text-8xl">
+            TRAILBLAZER
+          </h1>
+          <p className="mx-auto mt-4 max-w-xl text-base text-stone-300 sm:text-lg">
+            Off-road. Off-grid. All terrain. Master the physics, summit the mountain, and blaze trails across a massive
+            open world — solo or with friends.
+          </p>
+          <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+            <button
+              onClick={onPlay}
+              className="w-full rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-8 py-4 text-lg font-black text-black shadow-lg transition hover:brightness-110 sm:w-auto"
+            >
+              ▶ Play Free
+            </button>
+            <button
+              onClick={onPlay}
+              className="w-full rounded-xl bg-stone-800 px-8 py-4 font-semibold text-stone-200 ring-1 ring-white/10 transition hover:bg-stone-700 sm:w-auto"
+            >
+              Sign in
+            </button>
+          </div>
+          <p className="mt-3 text-xs text-stone-500">Create a free account (just a username) to save your progress.</p>
+        </div>
+
+        <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {features.map((f) => (
+            <div key={f.title} className="rounded-2xl bg-stone-800/50 p-5 ring-1 ring-white/10">
+              <div className="text-3xl">{f.icon}</div>
+              <div className="mt-2 font-bold">{f.title}</div>
+              <div className="mt-1 text-sm text-stone-400">{f.desc}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-14 rounded-2xl bg-gradient-to-r from-amber-500/10 to-orange-500/10 p-6 text-center ring-1 ring-amber-400/20">
+          <div className="text-xl font-bold">Ready to blaze a trail?</div>
+          <button
+            onClick={onPlay}
+            className="mt-4 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-8 py-3 font-black text-black transition hover:brightness-110"
+          >
+            ▶ Play Free
+          </button>
+        </div>
+
+        <p className="mt-10 text-center text-xs text-stone-600">
+          Built with React Three Fiber + Rapier · Works on desktop &amp; mobile
+        </p>
+      </div>
+    </main>
+  );
+}
+
+function AuthForm({ onAuthed, onBack }: { onAuthed: (p: Profile) => void; onBack: () => void }) {
   const [mode, setMode] = useState<"in" | "up">("in");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -390,6 +467,9 @@ function AuthForm({ onAuthed }: { onAuthed: (p: Profile) => void }) {
 
   return (
     <form onSubmit={submit} className="space-y-4 rounded-2xl bg-stone-800/60 p-6 ring-1 ring-white/10">
+      <button type="button" onClick={onBack} className="text-xs text-stone-400 transition hover:text-stone-200">
+        ‹ Back
+      </button>
       <div className="flex rounded-lg bg-stone-900 p-1 text-sm font-semibold">
         {(["in", "up"] as const).map((m) => (
           <button

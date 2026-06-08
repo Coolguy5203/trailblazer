@@ -12,8 +12,8 @@ export default function HUD({ roomCode }: { roomCode?: string }) {
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none">
-      {/* Speedometer */}
-      <div className="absolute bottom-6 right-6 flex flex-col items-end">
+      {/* Speedometer (top-right on mobile to clear the gas pedal) */}
+      <div className="absolute right-4 top-16 flex flex-col items-end md:bottom-6 md:right-6 md:top-auto">
         <div className="flex items-baseline gap-2">
           <span className="font-mono text-6xl font-bold tabular-nums text-white drop-shadow-lg">
             {Math.round(speed)}
@@ -55,8 +55,8 @@ export default function HUD({ roomCode }: { roomCode?: string }) {
         )}
       </div>
 
-      {/* Controls hint */}
-      <div className="absolute bottom-6 left-6 rounded-lg bg-black/35 px-4 py-2 text-xs text-white/80 backdrop-blur">
+      {/* Controls hint (keyboard only) */}
+      <div className="absolute bottom-6 left-6 hidden rounded-lg bg-black/35 px-4 py-2 text-xs text-white/80 backdrop-blur md:block">
         <span className="font-semibold text-white">WASD / Arrows</span> drive &nbsp;·&nbsp;
         <span className="font-semibold text-white">Space</span> handbrake &nbsp;·&nbsp;
         <span className="font-semibold text-white">R</span> recover

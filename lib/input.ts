@@ -12,8 +12,18 @@ export interface InputState {
 const pressed = new Set<string>();
 let scheme: ControlScheme = "both";
 
+// Virtual input from on-screen touch controls, merged with the keyboard.
+const touch = { throttle: 0, steer: 0, brake: false, reset: false };
+export function setTouchInput(t: Partial<typeof touch>) {
+  Object.assign(touch, t);
+}
+
 export function setScheme(s: ControlScheme) {
   scheme = s;
+}
+
+function clamp(v: number) {
+  return Math.max(-1, Math.min(1, v));
 }
 
 const wasd = { up: "keyw", down: "keys", left: "keya", right: "keyd" };
@@ -36,10 +46,10 @@ export function readInput(): InputState {
   const left = w.left || a.left;
   const right = w.right || a.right;
   return {
-    throttle: (up ? 1 : 0) - (down ? 1 : 0),
-    steer: (right ? 1 : 0) - (left ? 1 : 0),
-    brake: pressed.has("space"),
-    reset: pressed.has("keyr"),
+    throttle: clamp((up ? 1 : 0) - (down ? 1 : 0) + touch.throttle),
+    steer: clamp((right ? 1 : 0) - (left ? 1 : 0) + touch.steer),
+    brake: pressed.has("space") || touch.brake,
+    reset: pressed.has("keyr") || touch.reset,
   };
 }
 
