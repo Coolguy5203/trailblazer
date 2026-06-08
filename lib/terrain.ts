@@ -43,11 +43,19 @@ function ramp(x: number, z: number, cx: number, cz: number, len: number, wid: nu
   return (rx / len) * h * smoothstep(wid, wid * 0.4, Math.abs(rz));
 }
 
-// --- Granite Ascent: an absolutely humongous mountain with a spiral switchback
-// trail cut into it. The cone face is a ~45° wall (unclimbable straight up), but
-// the carved road winds ~7 times around at a gentle 1–9° grade to a flat summit.
-// phase = π/4 puts the trail entrance on the NE face, pointing back at Home Flats.
-const MTN = { x: -270, z: -270, R: 270, H: 255, turns: 7, rTop: 33, roadHalf: 12, roadBlend: 5, phase: Math.PI / 4 };
+// --- Granite Ascent: an absolutely humongous mountain built as a continuous
+// SPIRAL RAMP (like a parking-garage helix). The ramp has ~zero cross-slope so
+// you never slide off, climbs steadily as it winds up (no flat "around-and-
+// around" loops), and only the thin seam where each loop overlaps is a steep
+// wall (which the trail rounds, never crosses). phase places the gentle entrance
+// on the NE face pointing back at Home Flats.
+const MTN = { x: -240, z: -240, R: 285, H: 215, turns: 4, rTop: 38, phase: Math.PI / 4 };
+const MTN_SPACING = (MTN.R - MTN.rTop) / MTN.turns;
+const MTN_PITCH = MTN.H / MTN.turns; // height gained per loop
+
+function clamp(v: number, lo: number, hi: number) {
+  return Math.min(hi, Math.max(lo, v));
+}
 
 export function spiralMountain(x: number, z: number): { hm: number; wm: number; road: number } {
   const dx = x - MTN.x;
@@ -55,42 +63,30 @@ export function spiralMountain(x: number, z: number): { hm: number; wm: number; 
   const r = Math.hypot(dx, dz);
   if (r > MTN.R) return { hm: 0, wm: 0, road: 0 };
 
-  // blend the mountain over the base terrain near its rim
-  const wm = smoothstep(MTN.R, MTN.R - 24, r);
+  const wm = smoothstep(MTN.R, MTN.R - 32, r); // blend over base terrain near rim
+  if (r <= MTN.rTop) return { hm: MTN.H, wm, road: 0 }; // flat summit
 
-  // flat summit cap above the top of the trail
-  if (r <= MTN.rTop) return { hm: MTN.H * (1 - MTN.rTop / MTN.R), wm, road: 0 };
-
-  const coneH = MTN.H * (1 - r / MTN.R); // steep cone surface
-
-  // nearest spiral loop (loops are evenly spaced in radius)
+  // Spiral-ramp height: a continuous helicoid. `a` = angular fraction (0..1),
+  // `g` = radial loops in from the rim. The ramp surface is pitch*(n + a), where
+  // n is the loop index that best matches this radius. dh/dr ≈ 0 (no camber);
+  // height rises with `a` as you wind around. The integer step in n is the seam.
   let th = Math.atan2(dz, dx) - MTN.phase;
   th = ((th % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-  let bestDr = Infinity;
-  let roadH = coneH;
-  for (let k = 0; k < MTN.turns; k++) {
-    const phi = th + Math.PI * 2 * k;
-    const rc = MTN.R - (MTN.R - MTN.rTop) * (phi / (Math.PI * 2 * MTN.turns));
-    if (rc < MTN.rTop || rc > MTN.R) continue;
-    const dr = Math.abs(r - rc);
-    if (dr < bestDr) {
-      bestDr = dr;
-      roadH = MTN.H * (1 - rc / MTN.R);
-    }
-  }
+  const a = th / (Math.PI * 2);
+  const g = (MTN.R - r) / MTN_SPACING;
+  const q = g - a;
 
-  // Flare the trail into a broad, easy on-ramp at the home-facing base so it's
-  // simple to find and get onto; taper to normal width as you climb.
-  const thPi = th > Math.PI ? th - Math.PI * 2 : th; // -π..π from the entrance
-  const entrance = smoothstep(0.7, 0.15, Math.abs(thPi)) * smoothstep(MTN.R * 0.62, MTN.R, r);
-  const roadHalf = MTN.roadHalf + 12 * entrance;
+  // smooth the seam (the n-step) over a small radial band so it's a steep ramp,
+  // not a vertical cliff — a determined climber can attack it as a shortcut.
+  const f = q - Math.floor(q); // 0..1; 0 = ramp centre, 0.5 = seam
+  const nSmooth = Math.floor(q) + smoothstep(0.5 - 0.16, 0.5 + 0.16, f);
+  const hm = clamp(MTN_PITCH * (nSmooth + a), 0, MTN.H);
 
-  const road = smoothstep(roadHalf + MTN.roadBlend, roadHalf, bestDr);
-  // road cross-section: flat bench with a low berm at the edges to keep you on
-  const berm = 1.4 * Math.pow(Math.min(bestDr / roadHalf, 1), 2);
-  const surface = roadH + berm;
-  const hm = coneH * (1 - road) + surface * road;
-  return { hm, wm, road: road * wm };
+  // tint the drivable ramp (away from the seam) as packed dirt
+  const seamProx = Math.abs(f - 0.5); // 0 at seam, 0.5 at ramp centre
+  const road = smoothstep(0.18, 0.34, seamProx) * wm;
+
+  return { hm, wm, road };
 }
 
 /**

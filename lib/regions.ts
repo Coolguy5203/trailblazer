@@ -13,7 +13,7 @@ export interface Region {
 export const REGIONS: Region[] = [
   { id: "home", name: "Home Flats", tagline: "Where every trail begins", x: 0, z: 0, radius: 55 },
   { id: "speedway", name: "Salt Pan Speedway", tagline: "Wide open — let a fast rig fly", x: 360, z: 10, radius: 150 },
-  { id: "ascent", name: "Granite Ascent", tagline: "Spiral the trail all the way to the summit", x: -270, z: -270, radius: 310 },
+  { id: "ascent", name: "Granite Ascent", tagline: "Spiral the ramp all the way to the summit", x: -240, z: -240, radius: 320 },
   { id: "dunes", name: "The Dune Sea", tagline: "Roll the waves, catch big air", x: 30, z: 380, radius: 160 },
   { id: "ridge", name: "Switchback Ridge", tagline: "Twisty and technical — all-rounder turf", x: -390, z: 170, radius: 150 },
   { id: "basin", name: "Boulder Basin", tagline: "Crawl the rock garden", x: -380, z: 410, radius: 105 },
