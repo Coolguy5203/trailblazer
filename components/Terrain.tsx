@@ -44,6 +44,27 @@ export default function Terrain() {
             </RigidBody>
           );
         }
+        if (p.type === "tree") {
+          // conifer: trunk + stacked foliage cones; thin trunk collider to weave
+          const h = p.size;
+          return (
+            <RigidBody key={i} type="fixed" colliders={false} position={[p.x, y, p.z]} rotation={[0, p.rot, 0]}>
+              <mesh castShadow position={[0, h * 0.4, 0]}>
+                <cylinderGeometry args={[0.28, 0.38, h * 0.8, 7]} />
+                <meshStandardMaterial color="#5a4732" roughness={1} />
+              </mesh>
+              <mesh castShadow position={[0, h * 0.95, 0]}>
+                <coneGeometry args={[h * 0.5, h * 1.0, 8]} />
+                <meshStandardMaterial color="#3f5d34" roughness={1} flatShading />
+              </mesh>
+              <mesh castShadow position={[0, h * 1.45, 0]}>
+                <coneGeometry args={[h * 0.36, h * 0.8, 8]} />
+                <meshStandardMaterial color="#47683a" roughness={1} flatShading />
+              </mesh>
+              <CuboidCollider args={[0.4, h, 0.4]} position={[0, h, 0]} />
+            </RigidBody>
+          );
+        }
         // log — lower & crossable; the truck climbs over with its long travel
         return (
           <RigidBody key={i} type="fixed" colliders={false} position={[p.x, y + 0.45, p.z]} rotation={[0, p.rot, Math.PI / 2]}>

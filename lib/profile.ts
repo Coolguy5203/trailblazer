@@ -50,7 +50,7 @@ export async function loadCurrentProfile(): Promise<Profile | null> {
   if (!auth.user) return null;
   const { data, error } = await supabase
     .from("tb_profiles")
-    .select("id, username, distance_m, jumps, airtime_s, playtime_s, credits, owned_paints, owned_trucks")
+    .select("id, username, distance_m, jumps, airtime_s, playtime_s, credits, owned_paints, owned_trucks, story_progress")
     .eq("id", auth.user.id)
     .single();
   if (error || !data) return null;
@@ -68,6 +68,13 @@ export async function purchaseItem(kind: "paint" | "truck", id: string): Promise
     throw new Error("Purchase failed.");
   }
   return data as number;
+}
+
+// Complete a story chapter (server validates order + awards credits once).
+export async function completeChapter(chapterN: number): Promise<{ awarded: number; story_progress: number }> {
+  const { data, error } = await supabase.rpc("tb_story_complete", { p_chapter: chapterN });
+  if (error) throw new Error("Could not save chapter progress.");
+  return data as { awarded: number; story_progress: number };
 }
 
 // Record a time-trial finish (server validates + awards credits).

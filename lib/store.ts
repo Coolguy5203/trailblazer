@@ -13,6 +13,7 @@ export interface Profile {
   credits: number;
   owned_paints: string[];
   owned_trucks: string[];
+  story_progress: number;
 }
 
 interface GameState {
@@ -52,6 +53,17 @@ interface GameState {
   tickElapsed: (now: number) => void;
   setBearing: (b: number) => void;
   exitCourse: () => void;
+
+  // --- story run state ---
+  storyChapter: number | null;
+  storyStep: number; // discrete progress (collected / gates passed / 0|1)
+  storyGoal: number;
+  storyDone: boolean;
+  storyHits: number[]; // indices of collected flags / passed gates (for hiding markers)
+  startStory: (n: number, goal: number) => void;
+  storyHit: (index: number) => void;
+  storyReach: () => void;
+  exitStory: () => void;
 
   // app phase
   phase: "menu" | "driving";
@@ -97,6 +109,23 @@ export const useGame = create<GameState>((set) => ({
   tickElapsed: (now) => set((s) => (s.runState === "running" ? { elapsedMs: now - s.startMs } : {})),
   setBearing: (cpBearing) => set({ cpBearing }),
   exitCourse: () => set({ courseId: null, cpIndex: 0, cpCount: 0, runState: "ready", elapsedMs: 0, bestMs: null }),
+
+  storyChapter: null,
+  storyStep: 0,
+  storyGoal: 1,
+  storyDone: false,
+  storyHits: [],
+  startStory: (storyChapter, storyGoal) =>
+    set({ storyChapter, storyGoal, storyStep: 0, storyDone: false, storyHits: [] }),
+  storyHit: (index) =>
+    set((s) => {
+      if (s.storyDone || s.storyHits.includes(index)) return {};
+      const hits = [...s.storyHits, index];
+      const step = hits.length;
+      return { storyHits: hits, storyStep: step, storyDone: step >= s.storyGoal };
+    }),
+  storyReach: () => set((s) => (s.storyDone ? {} : { storyStep: s.storyGoal, storyDone: true })),
+  exitStory: () => set({ storyChapter: null, storyStep: 0, storyGoal: 1, storyDone: false, storyHits: [] }),
 
   phase: "menu",
   setPhase: (phase) => set({ phase }),

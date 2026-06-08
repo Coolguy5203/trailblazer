@@ -9,18 +9,25 @@ export interface Region {
   radius: number;
 }
 
-// Spread across the huge 1200u world.
+// Spread across the huge 1700u world. (Granite Ascent stays at -240,-240 to match
+// the spiral-mountain constants in terrain.ts.)
 export const REGIONS: Region[] = [
-  { id: "home", name: "Home Flats", tagline: "Where every trail begins", x: 0, z: 0, radius: 55 },
-  { id: "speedway", name: "Salt Pan Speedway", tagline: "Wide open — let a fast rig fly", x: 360, z: 10, radius: 150 },
-  { id: "ascent", name: "Granite Ascent", tagline: "Spiral the ramp all the way to the summit", x: -240, z: -240, radius: 320 },
-  { id: "dunes", name: "The Dune Sea", tagline: "Roll the waves, catch big air", x: 30, z: 380, radius: 160 },
-  { id: "ridge", name: "Switchback Ridge", tagline: "Twisty and technical — all-rounder turf", x: -390, z: 170, radius: 150 },
-  { id: "basin", name: "Boulder Basin", tagline: "Crawl the rock garden", x: -380, z: 410, radius: 105 },
-  { id: "timber", name: "Timber Hollow", tagline: "Mind the fallen logs", x: 300, z: -360, radius: 150 },
-  { id: "proving", name: "The Proving Grounds", tagline: "Ramps and kickers — send it", x: 210, z: 250, radius: 115 },
-  { id: "canyon", name: "Echo Canyon", tagline: "Wind through the carved walls", x: 410, z: -170, radius: 135 },
-  { id: "mesa", name: "High Mesa", tagline: "Up top — flat, fast and exposed", x: 450, z: -460, radius: 140 },
+  { id: "home", name: "Home Flats", tagline: "Where every trail begins", x: 0, z: 0, radius: 60 },
+  { id: "basecamp", name: "Basecamp", tagline: "The expedition's home base", x: 150, z: 150, radius: 90 },
+  { id: "speedway", name: "Salt Pan Speedway", tagline: "Wide open — let a fast rig fly", x: 480, z: 20, radius: 180 },
+  { id: "ascent", name: "Granite Ascent", tagline: "Spiral the ramp all the way to the summit", x: -240, z: -240, radius: 330 },
+  { id: "dunes", name: "The Dune Sea", tagline: "Roll the waves, catch big air", x: 60, z: 520, radius: 200 },
+  { id: "ridge", name: "Switchback Ridge", tagline: "Twisty and technical — all-rounder turf", x: -540, z: 240, radius: 180 },
+  { id: "basin", name: "Boulder Basin", tagline: "Crawl the rock garden", x: -520, z: 560, radius: 140 },
+  { id: "timber", name: "Timber Hollow", tagline: "Tight lines through the pines", x: 440, z: -500, radius: 190 },
+  { id: "proving", name: "The Proving Grounds", tagline: "Ramps and kickers — send it", x: 300, z: 360, radius: 150 },
+  { id: "canyon", name: "Echo Canyon", tagline: "Wind through the carved walls", x: 560, z: -240, radius: 170 },
+  { id: "mesa", name: "High Mesa", tagline: "Up top — flat, fast and exposed", x: 620, z: -560, radius: 180 },
+  // --- new regions ---
+  { id: "pines", name: "Whispering Pines", tagline: "Deep woods — weave the trees", x: -660, z: -80, radius: 185 },
+  { id: "mirage", name: "Mirage Flats", tagline: "A cracked dry lake, flat to the horizon", x: 250, z: -640, radius: 185 },
+  { id: "rift", name: "The Rift", tagline: "A maze of slot canyons", x: 640, z: 320, radius: 175 },
+  { id: "cinder", name: "Cinder Cone", tagline: "Skirt the crater of a sleeping cone", x: -160, z: 690, radius: 155 },
 ];
 
 export const WILDS = { id: "wilds", name: "The Backcountry", tagline: "Uncharted territory" };

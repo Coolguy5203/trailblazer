@@ -10,7 +10,11 @@ import { creditsEarned, formatCredits, CREDIT_SYMBOL } from "@/lib/economy";
 import { BASIC_PAINTS, PREMIUM_PAINTS, TRUCKS, paintHex, type PaintOption } from "@/lib/shop";
 import { regionAt, regionInfo } from "@/lib/regions";
 import { COURSES, course as getCourse, checkpointY, formatTime, type Course } from "@/lib/courses";
+import { CHAPTERS, chapter as getChapter, objectiveGoal, type Chapter } from "@/lib/story";
+import { completeChapter } from "@/lib/profile";
 import HUD from "@/components/HUD";
+
+const STORY_COLOR = "#5ad1ff";
 
 const Scene = dynamic(() => import("@/components/Scene"), { ssr: false });
 
@@ -39,6 +43,14 @@ export default function Page() {
   const activeCourseId = useGame((s) => s.courseId);
   const cpIndexLive = useGame((s) => s.cpIndex);
   const activeCourse = getCourse(activeCourseId);
+  const startStoryStore = useGame((s) => s.startStory);
+  const exitStoryStore = useGame((s) => s.exitStory);
+  const storyChapterN = useGame((s) => s.storyChapter);
+  const storyDone = useGame((s) => s.storyDone);
+  const storyStep = useGame((s) => s.storyStep);
+  const storyHits = useGame((s) => s.storyHits);
+  const activeChapter = getChapter(storyChapterN);
+  const [storyResult, setStoryResult] = useState<{ awarded: number } | null>(null);
 
   // restore session on load
   useEffect(() => {
@@ -60,14 +72,41 @@ export default function Page() {
   const startSession = useCallback(() => {
     resetSession();
     exitCourseStore();
+    exitStoryStore();
     setCourseResult(null);
+    setStoryResult(null);
     setSpawn([0, 3, 0]);
     setSpawnYaw(0);
     setLastEarned(null);
     setRegionId(null); // so the first frame announces the region we spawn in
     sessionStart.current = performance.now();
     setScreen("driving");
-  }, [resetSession, setRegionId, exitCourseStore]);
+  }, [resetSession, setRegionId, exitCourseStore, exitStoryStore]);
+
+  const startChapter = useCallback(
+    (c: Chapter) => {
+      resetSession();
+      exitCourseStore();
+      setCourseResult(null);
+      setStoryResult(null);
+      setLastEarned(null);
+      setRegionId(null);
+      const [sx, sz] = c.spawn;
+      setSpawn([sx, checkpointY(sx, sz) + 2.5, sz]);
+      // face the first objective point
+      const tgt =
+        c.objective.kind === "reach"
+          ? c.objective.target
+          : c.objective.kind === "gates" || c.objective.kind === "collect"
+            ? c.objective.points[0]
+            : [sx, sz + 1];
+      setSpawnYaw(Math.atan2(tgt[0] - sx, tgt[1] - sz));
+      startStoryStore(c.n, objectiveGoal(c.objective));
+      sessionStart.current = performance.now();
+      setScreen("driving");
+    },
+    [resetSession, setRegionId, exitCourseStore, startStoryStore]
+  );
 
   const startChallenge = useCallback(
     (c: Course) => {
@@ -98,6 +137,7 @@ export default function Page() {
     room.leave();
     const st = useGame.getState();
     exitCourseStore();
+    exitStoryStore();
     setLastEarned(creditsEarned(st.distanceM, st.jumps));
     const playtime = (performance.now() - sessionStart.current) / 1000;
     try {
@@ -140,9 +180,53 @@ export default function Page() {
           st.setBearing(Math.atan2(fx * dz - fz * dx, fx * dx + fz * dz));
         }
       }
+
+      // story-mode objective tracking
+      if (st.storyChapter != null && !st.storyDone) {
+        const ch = getChapter(st.storyChapter);
+        const o = ch?.objective;
+        if (o) {
+          if (o.kind === "reach") {
+            const d = Math.hypot(pos.x - o.target[0], pos.z - o.target[1]);
+            if (d < o.radius && (o.minY === undefined || pos.y >= o.minY)) st.storyReach();
+          } else if (o.kind === "bigair") {
+            if (st.bestAir >= o.seconds) st.storyReach();
+          } else if (o.kind === "collect") {
+            o.points.forEach((p, i) => {
+              if (!st.storyHits.includes(i) && Math.hypot(pos.x - p[0], pos.z - p[1]) < 7) st.storyHit(i);
+            });
+          } else if (o.kind === "gates") {
+            const idx = st.storyStep;
+            if (idx < o.points.length) {
+              const p = o.points[idx];
+              if (Math.hypot(pos.x - p[0], pos.z - p[1]) < 8 && Math.abs(pos.y - checkpointY(p[0], p[1])) < 8)
+                st.storyHit(idx);
+            }
+          }
+        }
+      }
     },
     [room]
   );
+
+  // when a chapter objective completes, save progress + award credits
+  useEffect(() => {
+    if (!storyDone || storyChapterN == null) return;
+    let cancelled = false;
+    completeChapter(storyChapterN)
+      .then(async (res) => {
+        if (cancelled) return;
+        setStoryResult({ awarded: res.awarded });
+        const p = await loadCurrentProfile();
+        if (p) setProfile(p);
+      })
+      .catch(() => {
+        if (!cancelled) setStoryResult({ awarded: 0 });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [storyDone, storyChapterN]);
 
   // when a run finishes, save the time + award credits
   useEffect(() => {
@@ -180,11 +264,29 @@ export default function Page() {
           checkpoints={activeCourse?.checkpoints}
           cpIndex={cpIndexLive}
           cpColor={activeCourse?.color}
+          story={
+            activeChapter
+              ? { objective: activeChapter.objective, hits: storyHits, step: storyStep, color: STORY_COLOR }
+              : undefined
+          }
           onFrame={onFrame}
         />
         <HUD roomCode={room.code ?? undefined} />
-        {!activeCourse && <RegionBanner />}
+        {!activeCourse && !activeChapter && <RegionBanner />}
         {activeCourse && <CourseHUD course={activeCourse} />}
+        {activeChapter && <StoryHUD chapter={activeChapter} step={storyStep} />}
+        {storyResult && activeChapter && (
+          <StoryFinish
+            chapter={activeChapter}
+            awarded={storyResult.awarded}
+            hasNext={!!getChapter(activeChapter.n + 1)}
+            onNext={() => {
+              const nxt = getChapter(activeChapter.n + 1);
+              if (nxt) startChapter(nxt);
+            }}
+            onExit={onLeaveDriving}
+          />
+        )}
         {courseResult && activeCourse && (
           <CourseFinish
             course={activeCourse}
@@ -236,6 +338,8 @@ export default function Page() {
             }}
             courseTimes={courseTimes}
             onChallenge={startChallenge}
+            storyProgress={profile?.story_progress ?? 0}
+            onChapter={startChapter}
             scheme={scheme}
             setScheme={setScheme}
             room={room}
@@ -334,6 +438,8 @@ function Menu({
   refreshProfile,
   courseTimes,
   onChallenge,
+  storyProgress,
+  onChapter,
   scheme,
   setScheme,
   room,
@@ -349,6 +455,8 @@ function Menu({
   refreshProfile: () => Promise<void>;
   courseTimes: Record<string, number>;
   onChallenge: (c: Course) => void;
+  storyProgress: number;
+  onChapter: (c: Chapter) => void;
   scheme: ControlScheme;
   setScheme: (s: ControlScheme) => void;
   room: ReturnType<typeof useRoom>;
@@ -439,6 +547,57 @@ function Menu({
             Last run earned <span className="font-bold">{CREDIT_SYMBOL} {formatCredits(lastEarned)}</span> credits
           </div>
         )}
+      </div>
+
+      {/* story */}
+      <div className="rounded-xl bg-gradient-to-b from-sky-900/40 to-stone-800/60 p-4 ring-1 ring-sky-400/20">
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-sm font-semibold text-sky-200">Story — The Trailblazer Expedition</span>
+          <span className="text-xs text-sky-300/70">
+            {Math.min(storyProgress, CHAPTERS.length)}/{CHAPTERS.length}
+          </span>
+        </div>
+        <div className="space-y-2">
+          {CHAPTERS.map((c) => {
+            const done = c.n <= storyProgress;
+            const current = c.n === storyProgress + 1;
+            const locked = c.n > storyProgress + 1;
+            return (
+              <div
+                key={c.id}
+                className={`rounded-lg p-3 ring-1 transition ${
+                  current ? "bg-sky-500/10 ring-sky-400/40" : "bg-stone-900 ring-white/5"
+                } ${locked ? "opacity-60" : ""}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-stone-500">Ch.{c.n}</span>
+                      <span className="font-semibold">{c.title}</span>
+                      {done && <span className="text-xs text-emerald-400">✓</span>}
+                    </div>
+                    <div className="text-xs leading-snug text-stone-400">{locked ? "Locked — finish the previous chapter" : c.blurb}</div>
+                    {!locked && (
+                      <div className="mt-1 text-xs text-amber-300">
+                        Reward {CREDIT_SYMBOL}
+                        {formatCredits(c.reward)}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => onChapter(c)}
+                    disabled={locked}
+                    className={`shrink-0 self-center rounded-md px-3 py-1.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:bg-stone-700 disabled:text-stone-500 ${
+                      current ? "bg-sky-500 text-black hover:brightness-110" : "bg-stone-700 text-stone-200 hover:bg-stone-600"
+                    }`}
+                  >
+                    {locked ? "🔒" : done ? "Replay" : "Start"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* vehicles */}
@@ -640,6 +799,68 @@ function Menu({
       </div>
 
       {err && <p className="text-center text-sm text-red-400">{err}</p>}
+    </div>
+  );
+}
+
+function StoryHUD({ chapter, step }: { chapter: Chapter; step: number }) {
+  const o = chapter.objective;
+  const goal = objectiveGoal(o);
+  const showProgress = o.kind === "collect" || o.kind === "gates";
+  return (
+    <div className="pointer-events-none absolute left-1/2 top-16 -translate-x-1/2 text-center">
+      <div className="rounded-xl bg-black/45 px-6 py-2 backdrop-blur">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-300">
+          Chapter {chapter.n} · {chapter.title}
+        </div>
+        <div className="text-lg font-semibold text-white">{o.hint}</div>
+        {showProgress && (
+          <div className="font-mono text-sm text-sky-200">
+            {step} / {goal}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StoryFinish({
+  chapter,
+  awarded,
+  hasNext,
+  onNext,
+  onExit,
+}: {
+  chapter: Chapter;
+  awarded: number;
+  hasNext: boolean;
+  onNext: () => void;
+  onExit: () => void;
+}) {
+  return (
+    <div className="absolute inset-0 grid place-items-center bg-black/55 backdrop-blur-sm">
+      <div className="w-80 rounded-2xl bg-stone-900 p-6 text-center ring-1 ring-white/10">
+        <div className="text-xs font-semibold uppercase tracking-widest text-sky-300">Chapter {chapter.n} complete</div>
+        <div className="my-2 text-2xl font-black text-white">{chapter.title}</div>
+        {!hasNext && <div className="mb-2 text-sm text-amber-200">🏁 You have charted the entire frontier!</div>}
+        {awarded > 0 ? (
+          <div className="mb-4 text-sm text-amber-300">
+            +{formatCredits(awarded)} {CREDIT_SYMBOL} credits
+          </div>
+        ) : (
+          <div className="mb-4 text-sm text-stone-400">Replay — already completed</div>
+        )}
+        <div className="flex gap-2">
+          {hasNext && (
+            <button onClick={onNext} className="flex-1 rounded-lg bg-sky-500 py-2.5 font-bold text-black transition hover:brightness-110">
+              Next chapter
+            </button>
+          )}
+          <button onClick={onExit} className="flex-1 rounded-lg bg-stone-700 py-2.5 font-semibold text-white transition hover:bg-stone-600">
+            Garage
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

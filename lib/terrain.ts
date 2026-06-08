@@ -2,8 +2,8 @@ import * as THREE from "three";
 import { REGIONS, type Region } from "./regions";
 
 // --- Map dimensions (HUGE multi-region world) ---
-export const MAP_SIZE = 1200; // world units, square, centered on origin
-export const SEGMENTS = 320; // grid resolution (cell ~3.75u) for visuals + physics trimesh
+export const MAP_SIZE = 1700; // world units, square, centered on origin
+export const SEGMENTS = 360; // grid resolution (cell ~4.7u) for visuals + physics trimesh
 export const HALF = MAP_SIZE / 2;
 
 const C: Record<string, Region> = Object.fromEntries(REGIONS.map((r) => [r.id, r]));
@@ -101,15 +101,35 @@ export function terrainHeight(x: number, z: number): number {
     Math.sin(x * 0.02) * Math.cos(z * 0.018) * 3.2 +
     Math.sin(x * 0.045 + 1.3) * Math.cos(z * 0.04) * 1.6;
 
-  // flatten the home pad...
+  // flatten the home pad, Basecamp, and the dead-flat speed pans
   h *= smoothstep(14, 50, dHome);
-  // ...and keep the Salt Pan Speedway near dead-flat for top speed
+  h *= 1 - 0.85 * w(x, z, C.basecamp);
   h *= 1 - 0.9 * w(x, z, C.speedway);
+  h *= 1 - 0.92 * w(x, z, C.mirage); // Mirage Flats: cracked dry lake, flat
 
   // (Granite Ascent's humongous spiral mountain is blended in at the end.)
 
   // --- High Mesa: a big flat-topped plateau, fast and exposed up top ---
   h += plateau(x, z, C.mesa.x, C.mesa.z, C.mesa.radius * 0.95, 26);
+
+  // --- Cinder Cone: a small volcano with a crater dip in the middle ---
+  h += bump(x, z, C.cinder.x, C.cinder.z, C.cinder.radius * 0.92, 58);
+  h += -bump(x, z, C.cinder.x, C.cinder.z, C.cinder.radius * 0.34, 40); // crater
+
+  // --- Whispering Pines: gentle rolling forest floor (trees are props) ---
+  {
+    const wp = w(x, z, C.pines);
+    if (wp > 0) h += (Math.sin(x * 0.07) * Math.cos(z * 0.06) * 4 + Math.sin(z * 0.04) * 2) * wp;
+  }
+
+  // --- The Rift: raised mesa fins with slot canyons carved between them ---
+  {
+    const wr = w(x, z, C.rift);
+    if (wr > 0) {
+      const fins = Math.max(0, Math.sin(x * 0.06)) * 16 + Math.max(0, Math.sin(z * 0.055 + 1.1)) * 11;
+      h += fins * wr;
+    }
+  }
 
   // --- Echo Canyon: a valley floor flanked by raised walls ---
   {
@@ -146,15 +166,16 @@ export function terrainHeight(x: number, z: number): number {
   h += ramp(x, z, C.proving.x + 34, C.proving.z - 30, 24, 7, 8.0);
 
   // --- standalone hills out in the backcountry to break up the open space ---
-  h += bump(x, z, 470, -460, 90, 16);
-  h += bump(x, z, 480, 470, 70, 12);
-  h += bump(x, z, -470, -480, 80, 14);
-  h += bump(x, z, 150, -150, 55, 7);
-  h += bump(x, z, -120, 120, 50, 6);
+  h += bump(x, z, 700, 640, 110, 20);
+  h += bump(x, z, -720, -660, 100, 18);
+  h += bump(x, z, 760, -700, 90, 16);
+  h += bump(x, z, -700, 700, 90, 15);
+  h += bump(x, z, 250, -300, 70, 9);
+  h += bump(x, z, -300, 60, 60, 8);
 
   // raised rim border so the map has a soft natural edge
-  h += smoothstep(HALF - 70, HALF - 16, Math.abs(x)) * 18;
-  h += smoothstep(HALF - 70, HALF - 16, Math.abs(z)) * 18;
+  h += smoothstep(HALF - 95, HALF - 22, Math.abs(x)) * 24;
+  h += smoothstep(HALF - 95, HALF - 22, Math.abs(z)) * 24;
 
   // blend the humongous spiral mountain over the base terrain
   const m = spiralMountain(x, z);
@@ -180,8 +201,10 @@ export function buildTerrain(): TerrainData {
   const mid = new THREE.Color("#7c8b4e"); // scrub
   const high = new THREE.Color("#9aa861"); // dry grass
   const rock = new THREE.Color("#8a8276");
-  const sand = new THREE.Color("#cdb079"); // dunes / salt pan
+  const sand = new THREE.Color("#cdb079"); // dunes / salt pan / dry lake
   const roadCol = new THREE.Color("#a8895c"); // packed-dirt spiral trail
+  const pine = new THREE.Color("#4d6b3f"); // forest floor
+  const cinderCol = new THREE.Color("#3a3230"); // volcanic ash
   const c = new THREE.Color();
 
   for (let i = 0; i < pos.count; i++) {
@@ -194,8 +217,12 @@ export function buildTerrain(): TerrainData {
     if (t < 0.45) c.copy(low).lerp(mid, t / 0.45);
     else c.copy(mid).lerp(high, (t - 0.45) / 0.55);
     if (y > 16) c.lerp(rock, smoothstep(16, 28, y));
-    const sandiness = Math.max(w(x, z, C.speedway), w(x, z, C.dunes) * 0.9);
-    if (sandiness > 0) c.lerp(sand, sandiness * 0.7);
+    const sandiness = Math.max(w(x, z, C.speedway), w(x, z, C.dunes) * 0.9, w(x, z, C.mirage));
+    if (sandiness > 0) c.lerp(sand, sandiness * 0.72);
+    const forest = w(x, z, C.pines);
+    if (forest > 0) c.lerp(pine, forest * 0.6);
+    const ash = w(x, z, C.cinder) * smoothstep(20, 45, y); // dark ash up the cone
+    if (ash > 0) c.lerp(cinderCol, ash * 0.8);
     const road = spiralMountain(x, z).road;
     if (road > 0) c.lerp(roadCol, road * 0.9);
     colors.push(c.r, c.g, c.b);
@@ -210,14 +237,30 @@ export function buildTerrain(): TerrainData {
   return cached;
 }
 
-// Fixed obstacle props. Rocks are low rounded boulders the truck climbs over;
-// logs are crossable. Clustered into the regions that suit them.
+// Fixed props. Rocks are low rounded boulders the truck climbs over; logs are
+// crossable; trees are thin trunks you weave between. Clustered by region.
 export interface Prop {
-  type: "rock" | "log";
+  type: "rock" | "log" | "tree";
   x: number;
   z: number;
   size: number;
   rot: number;
+}
+
+// Deterministic scatter for forests (so trees are stable across reloads).
+function scatterTrees(cx: number, cz: number, r: number, count: number, seed: number): Prop[] {
+  let s = seed % 233280;
+  const rnd = () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+  const out: Prop[] = [];
+  for (let i = 0; i < count; i++) {
+    const ang = rnd() * Math.PI * 2;
+    const rad = Math.sqrt(rnd()) * r;
+    out.push({ type: "tree", x: cx + Math.cos(ang) * rad, z: cz + Math.sin(ang) * rad, size: 3 + rnd() * 2.6, rot: rnd() * Math.PI * 2 });
+  }
+  return out;
 }
 
 export const PROPS: Prop[] = [
@@ -225,28 +268,33 @@ export const PROPS: Prop[] = [
   { type: "rock", x: 20, z: -18, size: 1.3, rot: 0.3 },
   { type: "rock", x: -24, z: 16, size: 1.6, rot: 1.1 },
   { type: "log", x: 16, z: 28, size: 5.0, rot: 0.5 },
-  // Boulder Basin rock garden cluster (around -380, 410)
-  { type: "rock", x: -370, z: 400, size: 1.6, rot: 0.2 },
-  { type: "rock", x: -388, z: 412, size: 2.4, rot: 1.0 },
-  { type: "rock", x: -398, z: 402, size: 1.5, rot: 2.4 },
-  { type: "rock", x: -376, z: 424, size: 1.9, rot: 0.6 },
-  { type: "rock", x: -392, z: 428, size: 1.3, rot: 1.9 },
-  { type: "rock", x: -362, z: 416, size: 2.1, rot: 0.9 },
-  { type: "log", x: -360, z: 396, size: 5.5, rot: 0.3 },
-  // (Granite Ascent is the spiral mountain — no props on it, they'd block the trail)
-  // Timber Hollow — fallen logs (around 300,-360)
-  { type: "log", x: 290, z: -360, size: 6.5, rot: 0.4 },
-  { type: "log", x: 318, z: -340, size: 6.0, rot: 1.2 },
-  { type: "log", x: 274, z: -384, size: 7.0, rot: -0.3 },
-  { type: "log", x: 336, z: -372, size: 5.5, rot: 1.9 },
-  { type: "rock", x: 308, z: -396, size: 1.6, rot: 0.7 },
-  { type: "log", x: 256, z: -344, size: 6.0, rot: 0.9 },
-  // Switchback Ridge — rocks on the trail (around -390,170)
-  { type: "rock", x: -380, z: 160, size: 1.7, rot: 1.1 },
-  { type: "log", x: -410, z: 188, size: 5.5, rot: 0.6 },
-  { type: "rock", x: -360, z: 196, size: 1.5, rot: 2.0 },
-  // Echo Canyon floor — a few boulders (around 410,-170)
-  { type: "rock", x: 400, z: -170, size: 1.9, rot: 0.8 },
-  { type: "rock", x: 424, z: -156, size: 1.5, rot: 1.6 },
-  { type: "rock", x: 410, z: -188, size: 2.0, rot: 0.2 },
+  // Boulder Basin rock garden (-520, 560)
+  { type: "rock", x: -510, z: 548, size: 1.6, rot: 0.2 },
+  { type: "rock", x: -528, z: 562, size: 2.4, rot: 1.0 },
+  { type: "rock", x: -538, z: 552, size: 1.5, rot: 2.4 },
+  { type: "rock", x: -516, z: 574, size: 1.9, rot: 0.6 },
+  { type: "rock", x: -532, z: 578, size: 1.3, rot: 1.9 },
+  { type: "rock", x: -502, z: 566, size: 2.1, rot: 0.9 },
+  { type: "log", x: -500, z: 546, size: 5.5, rot: 0.3 },
+  // Timber Hollow — fallen logs (440, -500)
+  { type: "log", x: 430, z: -500, size: 6.5, rot: 0.4 },
+  { type: "log", x: 458, z: -480, size: 6.0, rot: 1.2 },
+  { type: "log", x: 414, z: -524, size: 7.0, rot: -0.3 },
+  { type: "log", x: 476, z: -512, size: 5.5, rot: 1.9 },
+  { type: "rock", x: 448, z: -536, size: 1.6, rot: 0.7 },
+  // Switchback Ridge — rocks on the trail (-540, 240)
+  { type: "rock", x: -530, z: 230, size: 1.7, rot: 1.1 },
+  { type: "log", x: -560, z: 258, size: 5.5, rot: 0.6 },
+  { type: "rock", x: -510, z: 266, size: 1.5, rot: 2.0 },
+  // Echo Canyon floor — boulders (560, -240)
+  { type: "rock", x: 550, z: -240, size: 1.9, rot: 0.8 },
+  { type: "rock", x: 574, z: -226, size: 1.5, rot: 1.6 },
+  { type: "rock", x: 560, z: -258, size: 2.0, rot: 0.2 },
+  // The Rift — scattered boulders on the canyon floors (640, 320)
+  { type: "rock", x: 630, z: 320, size: 2.2, rot: 0.5 },
+  { type: "rock", x: 660, z: 300, size: 1.6, rot: 1.4 },
+  { type: "rock", x: 612, z: 344, size: 1.8, rot: 2.2 },
+  // Forests
+  ...scatterTrees(-660, -80, 165, 46, 12345), // Whispering Pines
+  ...scatterTrees(440, -500, 150, 16, 9981), // Timber Hollow
 ];

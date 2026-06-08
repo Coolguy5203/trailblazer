@@ -7,6 +7,8 @@ import * as THREE from "three";
 import Terrain from "./Terrain";
 import Truck from "./Truck";
 import Checkpoints from "./Checkpoints";
+import StoryMarkers from "./StoryMarkers";
+import type { Objective } from "@/lib/story";
 import { attachInput, setScheme } from "@/lib/input";
 import { useGame } from "@/lib/store";
 
@@ -136,10 +138,11 @@ interface SceneProps {
   checkpoints?: [number, number][];
   cpIndex?: number;
   cpColor?: string;
+  story?: { objective: Objective; hits: number[]; step: number; color: string };
   onFrame?: (pos: THREE.Vector3, quat: THREE.Quaternion, speedKmh: number) => void;
 }
 
-export default function Scene({ color, truckId, spawn, spawnYaw, remotes = [], checkpoints, cpIndex = 0, cpColor = "#7fdbff", onFrame }: SceneProps) {
+export default function Scene({ color, truckId, spawn, spawnYaw, remotes = [], checkpoints, cpIndex = 0, cpColor = "#7fdbff", story, onFrame }: SceneProps) {
   const chassis = useRef<RapierRigidBody | null>(null);
   const scheme = useGame((s) => s.scheme);
 
@@ -166,6 +169,7 @@ export default function Scene({ color, truckId, spawn, spawnYaw, remotes = [], c
       {checkpoints && checkpoints.length > 0 && (
         <Checkpoints checkpoints={checkpoints} cpIndex={cpIndex} color={cpColor} />
       )}
+      {story && <StoryMarkers objective={story.objective} hits={story.hits} step={story.step} color={story.color} />}
 
       <FollowCamera target={chassis} />
       <AdaptiveDpr pixelated />
