@@ -13,7 +13,7 @@ export interface Course {
 
 // Build checkpoints that follow the spiral ramp up Granite Ascent to the summit.
 function summitCheckpoints(): [number, number][] {
-  const M = { x: -240, z: -240, R: 285, rTop: 38, turns: 4, phase: Math.PI / 4 };
+  const M = { x: -900, z: -300, R: 285, rTop: 38, turns: 4, phase: Math.PI / 4 };
   const spacing = (M.R - M.rTop) / M.turns;
   const pts: [number, number][] = [];
   const tStart = 0.18,
@@ -46,12 +46,12 @@ export const COURSES: Course[] = [
     region: "speedway",
     tagline: "Flat-out across the pan — a Dust Runner's playground",
     checkpoints: [
-      [250, 10],
-      [300, -12],
-      [350, 16],
-      [400, -16],
-      [450, 10],
-      [482, -6],
+      [70, 310],
+      [170, 288],
+      [270, 316],
+      [370, 284],
+      [470, 310],
+      [540, 294],
     ],
     reward: 150,
     par_ms: 26000,
@@ -63,12 +63,12 @@ export const COURSES: Course[] = [
     region: "dunes",
     tagline: "Surf the dunes and mind the air",
     checkpoints: [
-      [-60, 330],
-      [-10, 360],
-      [40, 396],
-      [96, 360],
-      [120, 416],
-      [55, 436],
+      [-420, 760],
+      [-360, 800],
+      [-300, 850],
+      [-240, 810],
+      [-210, 880],
+      [-290, 940],
     ],
     reward: 200,
     par_ms: 34000,
@@ -80,12 +80,12 @@ export const COURSES: Course[] = [
     region: "basin",
     tagline: "Pick a clean line through the boulders",
     checkpoints: [
-      [-330, 376],
-      [-360, 398],
-      [-392, 408],
-      [-405, 432],
-      [-372, 446],
-      [-345, 422],
+      [-850, 856],
+      [-880, 878],
+      [-912, 888],
+      [-925, 912],
+      [-892, 926],
+      [-865, 902],
     ],
     reward: 180,
     par_ms: 38000,

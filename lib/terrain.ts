@@ -1,9 +1,9 @@
 import * as THREE from "three";
 import { REGIONS, type Region } from "./regions";
 
-// --- Map dimensions (HUGE multi-region world) ---
-export const MAP_SIZE = 1700; // world units, square, centered on origin
-export const SEGMENTS = 360; // grid resolution (cell ~4.7u) for visuals + physics trimesh
+// --- Map dimensions (HUGE grid world: 4x4 cells of 600u) ---
+export const MAP_SIZE = 2400; // world units, square, centered on origin
+export const SEGMENTS = 400; // grid resolution (cell ~6u) for visuals + physics trimesh
 export const HALF = MAP_SIZE / 2;
 
 const C: Record<string, Region> = Object.fromEntries(REGIONS.map((r) => [r.id, r]));
@@ -49,7 +49,7 @@ function ramp(x: number, z: number, cx: number, cz: number, len: number, wid: nu
 // around" loops), and only the thin seam where each loop overlaps is a steep
 // wall (which the trail rounds, never crosses). phase places the gentle entrance
 // on the NE face pointing back at Home Flats.
-const MTN = { x: -240, z: -240, R: 285, H: 215, turns: 4, rTop: 38, phase: Math.PI / 4 };
+const MTN = { x: -900, z: -300, R: 285, H: 215, turns: 4, rTop: 38, phase: Math.PI / 4 };
 const MTN_SPACING = (MTN.R - MTN.rTop) / MTN.turns;
 const MTN_PITCH = MTN.H / MTN.turns; // height gained per loop
 
@@ -165,13 +165,10 @@ export function terrainHeight(x: number, z: number): number {
   h += ramp(x, z, C.proving.x + 4, C.proving.z + 24, 20, 6, 6.0);
   h += ramp(x, z, C.proving.x + 34, C.proving.z - 30, 24, 7, 8.0);
 
-  // --- standalone hills out in the backcountry to break up the open space ---
-  h += bump(x, z, 700, 640, 110, 20);
-  h += bump(x, z, -720, -660, 100, 18);
-  h += bump(x, z, 760, -700, 90, 16);
-  h += bump(x, z, -700, 700, 90, 15);
-  h += bump(x, z, 250, -300, 70, 9);
-  h += bump(x, z, -300, 60, 60, 8);
+  // --- standalone hills in the spare Backcountry cell (+900,+900) ---
+  h += bump(x, z, 840, 840, 110, 20);
+  h += bump(x, z, 1000, 940, 90, 16);
+  h += bump(x, z, 900, 1040, 80, 13);
 
   // raised rim border so the map has a soft natural edge
   h += smoothstep(HALF - 95, HALF - 22, Math.abs(x)) * 24;
@@ -264,37 +261,37 @@ function scatterTrees(cx: number, cz: number, r: number, count: number, seed: nu
 }
 
 export const PROPS: Prop[] = [
-  // near home — easy first obstacles
-  { type: "rock", x: 20, z: -18, size: 1.3, rot: 0.3 },
-  { type: "rock", x: -24, z: 16, size: 1.6, rot: 1.1 },
-  { type: "log", x: 16, z: 28, size: 5.0, rot: 0.5 },
-  // Boulder Basin rock garden (-520, 560)
-  { type: "rock", x: -510, z: 548, size: 1.6, rot: 0.2 },
-  { type: "rock", x: -528, z: 562, size: 2.4, rot: 1.0 },
-  { type: "rock", x: -538, z: 552, size: 1.5, rot: 2.4 },
-  { type: "rock", x: -516, z: 574, size: 1.9, rot: 0.6 },
-  { type: "rock", x: -532, z: 578, size: 1.3, rot: 1.9 },
-  { type: "rock", x: -502, z: 566, size: 2.1, rot: 0.9 },
-  { type: "log", x: -500, z: 546, size: 5.5, rot: 0.3 },
-  // Timber Hollow — fallen logs (440, -500)
-  { type: "log", x: 430, z: -500, size: 6.5, rot: 0.4 },
-  { type: "log", x: 458, z: -480, size: 6.0, rot: 1.2 },
-  { type: "log", x: 414, z: -524, size: 7.0, rot: -0.3 },
-  { type: "log", x: 476, z: -512, size: 5.5, rot: 1.9 },
-  { type: "rock", x: 448, z: -536, size: 1.6, rot: 0.7 },
-  // Switchback Ridge — rocks on the trail (-540, 240)
-  { type: "rock", x: -530, z: 230, size: 1.7, rot: 1.1 },
-  { type: "log", x: -560, z: 258, size: 5.5, rot: 0.6 },
-  { type: "rock", x: -510, z: 266, size: 1.5, rot: 2.0 },
-  // Echo Canyon floor — boulders (560, -240)
-  { type: "rock", x: 550, z: -240, size: 1.9, rot: 0.8 },
-  { type: "rock", x: 574, z: -226, size: 1.5, rot: 1.6 },
-  { type: "rock", x: 560, z: -258, size: 2.0, rot: 0.2 },
-  // The Rift — scattered boulders on the canyon floors (640, 320)
-  { type: "rock", x: 630, z: 320, size: 2.2, rot: 0.5 },
-  { type: "rock", x: 660, z: 300, size: 1.6, rot: 1.4 },
-  { type: "rock", x: 612, z: 344, size: 1.8, rot: 2.2 },
+  // near home (-300,-300) — easy first obstacles
+  { type: "rock", x: -280, z: -318, size: 1.3, rot: 0.3 },
+  { type: "rock", x: -324, z: -284, size: 1.6, rot: 1.1 },
+  { type: "log", x: -284, z: -272, size: 5.0, rot: 0.5 },
+  // Boulder Basin rock garden (-900, 900)
+  { type: "rock", x: -890, z: 888, size: 1.6, rot: 0.2 },
+  { type: "rock", x: -908, z: 902, size: 2.4, rot: 1.0 },
+  { type: "rock", x: -918, z: 892, size: 1.5, rot: 2.4 },
+  { type: "rock", x: -896, z: 914, size: 1.9, rot: 0.6 },
+  { type: "rock", x: -912, z: 918, size: 1.3, rot: 1.9 },
+  { type: "rock", x: -882, z: 906, size: 2.1, rot: 0.9 },
+  { type: "log", x: -880, z: 886, size: 5.5, rot: 0.3 },
+  // Timber Hollow — fallen logs (300, -900)
+  { type: "log", x: 290, z: -900, size: 6.5, rot: 0.4 },
+  { type: "log", x: 318, z: -880, size: 6.0, rot: 1.2 },
+  { type: "log", x: 274, z: -924, size: 7.0, rot: -0.3 },
+  { type: "log", x: 336, z: -912, size: 5.5, rot: 1.9 },
+  { type: "rock", x: 308, z: -936, size: 1.6, rot: 0.7 },
+  // Switchback Ridge — rocks on the trail (-900, 300)
+  { type: "rock", x: -890, z: 290, size: 1.7, rot: 1.1 },
+  { type: "log", x: -920, z: 318, size: 5.5, rot: 0.6 },
+  { type: "rock", x: -870, z: 326, size: 1.5, rot: 2.0 },
+  // Echo Canyon floor — boulders (900, -300)
+  { type: "rock", x: 890, z: -300, size: 1.9, rot: 0.8 },
+  { type: "rock", x: 914, z: -286, size: 1.5, rot: 1.6 },
+  { type: "rock", x: 900, z: -318, size: 2.0, rot: 0.2 },
+  // The Rift — scattered boulders on the canyon floors (900, 300)
+  { type: "rock", x: 890, z: 320, size: 2.2, rot: 0.5 },
+  { type: "rock", x: 920, z: 300, size: 1.6, rot: 1.4 },
+  { type: "rock", x: 872, z: 344, size: 1.8, rot: 2.2 },
   // Forests
-  ...scatterTrees(-660, -80, 165, 46, 12345), // Whispering Pines
-  ...scatterTrees(440, -500, 150, 16, 9981), // Timber Hollow
+  ...scatterTrees(-900, -900, 255, 60, 12345), // Whispering Pines
+  ...scatterTrees(300, -900, 200, 18, 9981), // Timber Hollow
 ];

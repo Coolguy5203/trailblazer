@@ -80,7 +80,7 @@ export default function Page() {
     exitStoryStore();
     setCourseResult(null);
     setStoryResult(null);
-    setSpawn([0, 3, 0]);
+    setSpawn([-300, checkpointY(-300, -300) + 3, -300]); // Home Flats centre
     setSpawnYaw(0);
     setLastEarned(null);
     setRegionId(null); // so the first frame announces the region we spawn in

@@ -50,13 +50,15 @@ export default function Minimap() {
   return (
     <div className="pointer-events-none absolute right-4 top-4 select-none">
       <svg width={SIZE} height={SIZE} className="rounded-xl bg-black/45 ring-1 ring-white/20 backdrop-blur">
-        {/* regions */}
+        {/* regions: equal square cells on the grid */}
         {REGIONS.map((r) => (
-          <circle
+          <rect
             key={r.id}
-            cx={px(r.x)}
-            cy={py(r.z)}
-            r={pr(r.radius)}
+            x={px(r.x - r.radius)}
+            y={py(r.z - r.radius)}
+            width={pr(r.radius * 2)}
+            height={pr(r.radius * 2)}
+            rx={2}
             fill={r.id === regionId ? "rgba(245,200,80,0.18)" : "rgba(255,255,255,0.05)"}
             stroke={r.id === regionId ? "rgba(245,200,80,0.7)" : "rgba(255,255,255,0.18)"}
             strokeWidth={r.id === regionId ? 1.4 : 0.8}

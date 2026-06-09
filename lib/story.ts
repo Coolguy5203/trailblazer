@@ -26,9 +26,9 @@ export const CHAPTERS: Chapter[] = [
     region: "basecamp",
     blurb:
       "Every expedition starts somewhere. Roll out from Home Flats and report in at Basecamp — the team's waiting on you.",
-    objective: { kind: "reach", target: [150, 150], radius: 13, hint: "Drive to the Basecamp beacon" },
+    objective: { kind: "reach", target: [300, -300], radius: 13, hint: "Drive to the Basecamp beacon" },
     reward: 100,
-    spawn: [0, 0],
+    spawn: [-300, -300],
   },
   {
     n: 2,
@@ -39,16 +39,16 @@ export const CHAPTERS: Chapter[] = [
     objective: {
       kind: "gates",
       points: [
-        [350, 4],
-        [420, -20],
-        [490, 18],
-        [560, -14],
-        [612, 6],
+        [110, 330],
+        [210, 306],
+        [310, 334],
+        [410, 302],
+        [500, 326],
       ],
       hint: "Blast through every marker in order",
     },
     reward: 150,
-    spawn: [300, 10],
+    spawn: [50, 330],
   },
   {
     n: 3,
@@ -59,16 +59,16 @@ export const CHAPTERS: Chapter[] = [
     objective: {
       kind: "collect",
       points: [
-        [-650, -70],
-        [-705, -25],
-        [-615, -135],
-        [-740, -115],
-        [-585, -30],
+        [-890, -890],
+        [-945, -845],
+        [-855, -955],
+        [-980, -935],
+        [-825, -850],
       ],
       hint: "Recover all 5 survey flags",
     },
     reward: 180,
-    spawn: [-560, -60],
+    spawn: [-760, -880],
   },
   {
     n: 4,
@@ -78,7 +78,7 @@ export const CHAPTERS: Chapter[] = [
     blurb: "The Dune Sea is one giant launch ramp. Hit a crest with speed and get the rig properly airborne.",
     objective: { kind: "bigair", seconds: 2.0, hint: "Catch 2.0s of airtime off a dune" },
     reward: 200,
-    spawn: [40, 470],
+    spawn: [-300, 730],
   },
   {
     n: 5,
@@ -89,17 +89,17 @@ export const CHAPTERS: Chapter[] = [
     objective: {
       kind: "gates",
       points: [
-        [600, 300],
-        [642, 338],
-        [684, 304],
-        [700, 352],
-        [654, 384],
-        [618, 356],
+        [860, 280],
+        [902, 318],
+        [944, 284],
+        [960, 332],
+        [914, 364],
+        [878, 336],
       ],
       hint: "Find the line through every canyon marker",
     },
     reward: 220,
-    spawn: [560, 300],
+    spawn: [820, 280],
   },
   {
     n: 6,
@@ -107,9 +107,9 @@ export const CHAPTERS: Chapter[] = [
     title: "Cone Patrol",
     region: "cinder",
     blurb: "Cinder Cone has been grumbling. Climb its flank and plant a sensor on the crater rim.",
-    objective: { kind: "reach", target: [-160, 638], radius: 15, minY: 30, hint: "Climb to the crater rim" },
+    objective: { kind: "reach", target: [300, 790], radius: 15, minY: 30, hint: "Climb to the crater rim" },
     reward: 240,
-    spawn: [-160, 560],
+    spawn: [300, 660],
   },
   {
     n: 7,
@@ -118,9 +118,9 @@ export const CHAPTERS: Chapter[] = [
     region: "ascent",
     blurb:
       "One peak remains uncharted. Take the spiral ramp all the way up Granite Ascent and stand on the roof of the frontier.",
-    objective: { kind: "reach", target: [-240, -240], radius: 22, minY: 180, hint: "Reach the mountain summit" },
+    objective: { kind: "reach", target: [-900, -300], radius: 22, minY: 180, hint: "Reach the mountain summit" },
     reward: 500,
-    spawn: [-30, -30],
+    spawn: [-660, -110],
   },
 ];
 

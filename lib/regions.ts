@@ -1,33 +1,41 @@
 // Named map regions. Single source of truth for both terrain shaping
 // (lib/terrain.ts reads the centres) and the on-screen "entering region" popup.
+//
+// The world is a 4x4 grid of equal, non-overlapping 600x600 cells (map 2400u).
+// `radius` is the half-extent of the square cell (300). 15 regions fill 15
+// cells; the 16th cell (+900,+900) is left as open Backcountry.
 export interface Region {
   id: string;
   name: string;
   tagline: string;
   x: number;
   z: number;
-  radius: number;
+  radius: number; // half-extent of the square cell
 }
 
-// Spread across the huge 1700u world. (Granite Ascent stays at -240,-240 to match
-// the spiral-mountain constants in terrain.ts.)
+export const CELL = 600;
+const H = CELL / 2; // 300
+
 export const REGIONS: Region[] = [
-  { id: "home", name: "Home Flats", tagline: "Where every trail begins", x: 0, z: 0, radius: 60 },
-  { id: "basecamp", name: "Basecamp", tagline: "The expedition's home base", x: 150, z: 150, radius: 90 },
-  { id: "speedway", name: "Salt Pan Speedway", tagline: "Wide open — let a fast rig fly", x: 480, z: 20, radius: 180 },
-  { id: "ascent", name: "Granite Ascent", tagline: "Spiral the ramp all the way to the summit", x: -240, z: -240, radius: 330 },
-  { id: "dunes", name: "The Dune Sea", tagline: "Roll the waves, catch big air", x: 60, z: 520, radius: 200 },
-  { id: "ridge", name: "Switchback Ridge", tagline: "Twisty and technical — all-rounder turf", x: -540, z: 240, radius: 180 },
-  { id: "basin", name: "Boulder Basin", tagline: "Crawl the rock garden", x: -520, z: 560, radius: 140 },
-  { id: "timber", name: "Timber Hollow", tagline: "Tight lines through the pines", x: 440, z: -500, radius: 190 },
-  { id: "proving", name: "The Proving Grounds", tagline: "Ramps and kickers — send it", x: 300, z: 360, radius: 150 },
-  { id: "canyon", name: "Echo Canyon", tagline: "Wind through the carved walls", x: 560, z: -240, radius: 170 },
-  { id: "mesa", name: "High Mesa", tagline: "Up top — flat, fast and exposed", x: 620, z: -560, radius: 180 },
-  // --- new regions ---
-  { id: "pines", name: "Whispering Pines", tagline: "Deep woods — weave the trees", x: -660, z: -80, radius: 185 },
-  { id: "mirage", name: "Mirage Flats", tagline: "A cracked dry lake, flat to the horizon", x: 250, z: -640, radius: 185 },
-  { id: "rift", name: "The Rift", tagline: "A maze of slot canyons", x: 640, z: 320, radius: 175 },
-  { id: "cinder", name: "Cinder Cone", tagline: "Skirt the crater of a sleeping cone", x: -160, z: 690, radius: 155 },
+  // row z = -900
+  { id: "pines", name: "Whispering Pines", tagline: "Deep woods — weave the trees", x: -900, z: -900, radius: H },
+  { id: "mesa", name: "High Mesa", tagline: "Up top — flat, fast and exposed", x: -300, z: -900, radius: H },
+  { id: "timber", name: "Timber Hollow", tagline: "Tight lines through the pines", x: 300, z: -900, radius: H },
+  { id: "mirage", name: "Mirage Flats", tagline: "A cracked dry lake, flat to the horizon", x: 900, z: -900, radius: H },
+  // row z = -300
+  { id: "ascent", name: "Granite Ascent", tagline: "Spiral the ramp all the way to the summit", x: -900, z: -300, radius: H },
+  { id: "home", name: "Home Flats", tagline: "Where every trail begins", x: -300, z: -300, radius: H },
+  { id: "basecamp", name: "Basecamp", tagline: "The expedition's home base", x: 300, z: -300, radius: H },
+  { id: "canyon", name: "Echo Canyon", tagline: "Wind through the carved walls", x: 900, z: -300, radius: H },
+  // row z = 300
+  { id: "ridge", name: "Switchback Ridge", tagline: "Twisty and technical — all-rounder turf", x: -900, z: 300, radius: H },
+  { id: "proving", name: "The Proving Grounds", tagline: "Ramps and kickers — send it", x: -300, z: 300, radius: H },
+  { id: "speedway", name: "Salt Pan Speedway", tagline: "Wide open — let a fast rig fly", x: 300, z: 300, radius: H },
+  { id: "rift", name: "The Rift", tagline: "A maze of slot canyons", x: 900, z: 300, radius: H },
+  // row z = 900 (cell +900,+900 stays Backcountry)
+  { id: "basin", name: "Boulder Basin", tagline: "Crawl the rock garden", x: -900, z: 900, radius: H },
+  { id: "dunes", name: "The Dune Sea", tagline: "Roll the waves, catch big air", x: -300, z: 900, radius: H },
+  { id: "cinder", name: "Cinder Cone", tagline: "Skirt the crater of a sleeping cone", x: 300, z: 900, radius: H },
 ];
 
 export const WILDS = { id: "wilds", name: "The Backcountry", tagline: "Uncharted territory" };
@@ -37,18 +45,12 @@ export function region(id: string): Region | undefined {
   return byId[id];
 }
 
-// Nearest region whose circle contains (x, z); null = backcountry/wilds.
+// The square cell containing (x, z); null = backcountry/wilds (spare cell + rim).
 export function regionAt(x: number, z: number): Region | null {
-  let best: Region | null = null;
-  let bestD = Infinity;
   for (const r of REGIONS) {
-    const d = Math.hypot(x - r.x, z - r.z);
-    if (d <= r.radius && d < bestD) {
-      best = r;
-      bestD = d;
-    }
+    if (Math.abs(x - r.x) <= r.radius && Math.abs(z - r.z) <= r.radius) return r;
   }
-  return best;
+  return null;
 }
 
 export function regionInfo(id: string | null): { name: string; tagline: string } {
