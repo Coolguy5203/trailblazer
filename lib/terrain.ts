@@ -35,6 +35,36 @@ function w(x: number, z: number, reg: Region) {
   return smoothstep(reg.radius, reg.radius * 0.25, d);
 }
 
+// --- Trail network: smooth packed-dirt roads on the grid lines that run
+// through every cell centre (x or z = ±300 / ±900). Off-trail terrain is rough;
+// on-trail it's smooth, so trails are the easy way to traverse the map.
+const TRAIL_LINES = [-900, -300, 300, 900];
+const TRAIL_HALF = 9; // flat width
+const TRAIL_BLEND = 7; // feather
+
+export function trailMask(x: number, z: number): number {
+  let d = Infinity;
+  for (const c of TRAIL_LINES) {
+    const dx = Math.abs(x - c);
+    if (dx < d) d = dx;
+    const dz = Math.abs(z - c);
+    if (dz < d) d = dz;
+  }
+  return smoothstep(TRAIL_HALF + TRAIL_BLEND, TRAIL_HALF, d);
+}
+
+// Mid-frequency roughness that makes off-trail driving a real fight.
+function roughness(x: number, z: number): number {
+  return (
+    Math.sin(x * 0.31) * Math.cos(z * 0.29) * 1.1 +
+    Math.sin(x * 0.12 + 1.0) * Math.sin(z * 0.14) * 0.9 +
+    Math.cos((x + z) * 0.22 + 0.5) * 0.5
+  );
+}
+
+// --- Forest lake in Whispering Pines ---
+export const LAKE = { x: -1000, z: -760, r: 70, waterY: -3.2 };
+
 // A wedge ramp rising along +x within a small footprint.
 function ramp(x: number, z: number, cx: number, cz: number, len: number, wid: number, h: number) {
   const rx = x - cx,
@@ -107,14 +137,28 @@ export function terrainHeight(x: number, z: number): number {
   h *= 1 - 0.9 * w(x, z, C.speedway);
   h *= 1 - 0.92 * w(x, z, C.mirage); // Mirage Flats: cracked dry lake, flat
 
+  // --- global off-trail roughness: the map is hard to traverse EXCEPT on the
+  // trail network. Suppressed on trails, the flat pans, home/basecamp, and
+  // halved in the dunes so the dash stays fun.
+  {
+    let amp = 1 - trailMask(x, z);
+    amp *= smoothstep(14, 50, dHome);
+    amp *= 1 - 0.95 * w(x, z, C.basecamp);
+    amp *= 1 - 0.95 * w(x, z, C.speedway);
+    amp *= 1 - 0.95 * w(x, z, C.mirage);
+    amp *= 1 - 0.5 * w(x, z, C.dunes);
+    amp *= 1 - 0.6 * w(x, z, C.proving); // keep ramp run-ups usable
+    h += roughness(x, z) * amp;
+  }
+
   // (Granite Ascent's humongous spiral mountain is blended in at the end.)
 
   // --- High Mesa: a big flat-topped plateau, fast and exposed up top ---
   h += plateau(x, z, C.mesa.x, C.mesa.z, C.mesa.radius * 0.95, 26);
 
-  // --- Cinder Cone: a small volcano with a crater dip in the middle ---
-  h += bump(x, z, C.cinder.x, C.cinder.z, C.cinder.radius * 0.92, 58);
-  h += -bump(x, z, C.cinder.x, C.cinder.z, C.cinder.radius * 0.34, 40); // crater
+  // --- Cinder Cone: a LARGE active volcano — tall cone, deep crater w/ lava ---
+  h += bump(x, z, C.cinder.x, C.cinder.z, C.cinder.radius * 0.97, 95);
+  h += -bump(x, z, C.cinder.x, C.cinder.z, C.cinder.radius * 0.36, 72); // crater
 
   // --- Whispering Pines: gentle rolling forest floor (trees are props) ---
   {
@@ -165,10 +209,21 @@ export function terrainHeight(x: number, z: number): number {
   h += ramp(x, z, C.proving.x + 4, C.proving.z + 24, 20, 6, 6.0);
   h += ramp(x, z, C.proving.x + 34, C.proving.z - 30, 24, 7, 8.0);
 
-  // --- standalone hills in the spare Backcountry cell (+900,+900) ---
-  h += bump(x, z, 840, 840, 110, 20);
-  h += bump(x, z, 1000, 940, 90, 16);
-  h += bump(x, z, 900, 1040, 80, 13);
+  // --- The Badlands (+900,+900): brutal jagged fins + heavy chop. Crossable,
+  // but realistically only by high-grip/clearance rigs (Boulder/Juggernaut).
+  {
+    const wb = w(x, z, C.badlands);
+    if (wb > 0) {
+      const fins =
+        Math.abs(Math.sin(x * 0.05)) * 9 +
+        Math.abs(Math.sin(z * 0.045 + 1.2)) * 7 +
+        roughness(x * 1.7, z * 1.7) * 2.2;
+      h += fins * wb * (1 - trailMask(x, z) * 0.8); // the trail stays survivable
+    }
+  }
+
+  // --- Forest lake in Whispering Pines: a bowl below the waterline ---
+  h += -bump(x, z, LAKE.x, LAKE.z, LAKE.r, 9);
 
   // raised rim border so the map has a soft natural edge
   h += smoothstep(HALF - 95, HALF - 22, Math.abs(x)) * 24;
@@ -218,8 +273,14 @@ export function buildTerrain(): TerrainData {
     if (sandiness > 0) c.lerp(sand, sandiness * 0.72);
     const forest = w(x, z, C.pines);
     if (forest > 0) c.lerp(pine, forest * 0.6);
-    const ash = w(x, z, C.cinder) * smoothstep(20, 45, y); // dark ash up the cone
-    if (ash > 0) c.lerp(cinderCol, ash * 0.8);
+    const ash = w(x, z, C.cinder) * smoothstep(25, 60, y); // dark ash up the cone
+    if (ash > 0) c.lerp(cinderCol, ash * 0.85);
+    const bad = w(x, z, C.badlands);
+    if (bad > 0) c.lerp(rock, bad * 0.65);
+    const lakeBed = smoothstep(LAKE.r, LAKE.r * 0.5, Math.hypot(x - LAKE.x, z - LAKE.z));
+    if (lakeBed > 0) c.lerp(new THREE.Color("#3d4a3a"), lakeBed * 0.6);
+    const trail = trailMask(x, z);
+    if (trail > 0) c.lerp(roadCol, trail * 0.85);
     const road = spiralMountain(x, z).road;
     if (road > 0) c.lerp(roadCol, road * 0.9);
     colors.push(c.r, c.g, c.b);
@@ -237,15 +298,15 @@ export function buildTerrain(): TerrainData {
 // Fixed props. Rocks are low rounded boulders the truck climbs over; logs are
 // crossable; trees are thin trunks you weave between. Clustered by region.
 export interface Prop {
-  type: "rock" | "log" | "tree";
+  type: "rock" | "log" | "tree" | "bush" | "cactus" | "arch";
   x: number;
   z: number;
   size: number;
   rot: number;
 }
 
-// Deterministic scatter for forests (so trees are stable across reloads).
-function scatterTrees(cx: number, cz: number, r: number, count: number, seed: number): Prop[] {
+// Deterministic scatter (stable across reloads).
+function scatter(type: Prop["type"], cx: number, cz: number, r: number, count: number, seed: number, sizeBase: number, sizeVar: number): Prop[] {
   let s = seed % 233280;
   const rnd = () => {
     s = (s * 9301 + 49297) % 233280;
@@ -255,12 +316,12 @@ function scatterTrees(cx: number, cz: number, r: number, count: number, seed: nu
   for (let i = 0; i < count; i++) {
     const ang = rnd() * Math.PI * 2;
     const rad = Math.sqrt(rnd()) * r;
-    out.push({ type: "tree", x: cx + Math.cos(ang) * rad, z: cz + Math.sin(ang) * rad, size: 3 + rnd() * 2.6, rot: rnd() * Math.PI * 2 });
+    out.push({ type, x: cx + Math.cos(ang) * rad, z: cz + Math.sin(ang) * rad, size: sizeBase + rnd() * sizeVar, rot: rnd() * Math.PI * 2 });
   }
   return out;
 }
 
-export const PROPS: Prop[] = [
+const RAW_PROPS: Prop[] = [
   // near home (-300,-300) — easy first obstacles
   { type: "rock", x: -280, z: -318, size: 1.3, rot: 0.3 },
   { type: "rock", x: -324, z: -284, size: 1.6, rot: 1.1 },
@@ -292,6 +353,24 @@ export const PROPS: Prop[] = [
   { type: "rock", x: 920, z: 300, size: 1.6, rot: 1.4 },
   { type: "rock", x: 872, z: 344, size: 1.8, rot: 2.2 },
   // Forests
-  ...scatterTrees(-900, -900, 255, 60, 12345), // Whispering Pines
-  ...scatterTrees(300, -900, 200, 18, 9981), // Timber Hollow
+  ...scatter("tree", -900, -900, 255, 60, 12345, 3, 2.6), // Whispering Pines
+  ...scatter("tree", 300, -900, 200, 18, 9981, 3, 2.6), // Timber Hollow
+  // Greenery & desert flora across the map (bushes have no collider — fun, not hard)
+  ...scatter("bush", -300, -300, 220, 14, 311, 1.0, 0.8), // home
+  ...scatter("bush", 300, -300, 200, 12, 412, 1.0, 0.8), // basecamp
+  ...scatter("bush", -900, 300, 230, 16, 513, 1.0, 0.9), // ridge
+  ...scatter("bush", -300, 300, 200, 10, 614, 1.0, 0.7), // proving
+  ...scatter("bush", -900, -300, 120, 8, 715, 1.0, 0.7), // ascent foothills
+  ...scatter("cactus", 900, -900, 230, 14, 816, 2.2, 1.4), // mirage
+  ...scatter("cactus", 300, 300, 210, 8, 917, 2.0, 1.2), // speedway fringe
+  ...scatter("cactus", 900, 900, 220, 10, 1018, 2.4, 1.4), // badlands
+  // landmark rock arches over the canyon/rift floors
+  { type: "arch", x: 900, z: -340, size: 9, rot: 0.4 },
+  { type: "arch", x: 940, z: 260, size: 8, rot: 1.8 },
+  { type: "arch", x: 860, z: 940, size: 10, rot: 0.9 }, // badlands gateway
 ];
+
+// keep flora out of the lake
+export const PROPS: Prop[] = RAW_PROPS.filter(
+  (p) => Math.hypot(p.x - LAKE.x, p.z - LAKE.z) > 82 || p.type === "rock" || p.type === "log"
+);

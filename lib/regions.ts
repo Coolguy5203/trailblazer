@@ -32,10 +32,11 @@ export const REGIONS: Region[] = [
   { id: "proving", name: "The Proving Grounds", tagline: "Ramps and kickers — send it", x: -300, z: 300, radius: H },
   { id: "speedway", name: "Salt Pan Speedway", tagline: "Wide open — let a fast rig fly", x: 300, z: 300, radius: H },
   { id: "rift", name: "The Rift", tagline: "A maze of slot canyons", x: 900, z: 300, radius: H },
-  // row z = 900 (cell +900,+900 stays Backcountry)
+  // row z = 900
   { id: "basin", name: "Boulder Basin", tagline: "Crawl the rock garden", x: -900, z: 900, radius: H },
   { id: "dunes", name: "The Dune Sea", tagline: "Roll the waves, catch big air", x: -300, z: 900, radius: H },
-  { id: "cinder", name: "Cinder Cone", tagline: "Skirt the crater of a sleeping cone", x: 300, z: 900, radius: H },
+  { id: "cinder", name: "Cinder Cone", tagline: "An active volcano — mind the lava", x: 300, z: 900, radius: H },
+  { id: "badlands", name: "The Badlands", tagline: "Brutal ground — only the toughest rigs survive", x: 900, z: 900, radius: H },
 ];
 
 export const WILDS = { id: "wilds", name: "The Backcountry", tagline: "Uncharted territory" };
