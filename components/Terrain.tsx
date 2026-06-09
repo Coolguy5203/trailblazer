@@ -7,6 +7,77 @@ import { buildTerrain, PROPS, terrainHeight, HALF, LAKE } from "@/lib/terrain";
 
 const VOLCANO = { x: 300, z: 900 };
 
+const TREES = PROPS.filter((p) => p.type === "tree");
+const GROUND_PROPS = PROPS.filter((p) => p.type !== "tree");
+
+// Dense forests: ONE instanced mesh for all trees (merged trunk+foliage geometry
+// with vertex colors), plus invisible per-tree trunk colliders.
+function Forest() {
+  const { geometry, matrices } = useMemo(() => {
+    const paint = (g: THREE.BufferGeometry, hex: string) => {
+      const c = new THREE.Color(hex);
+      const n = g.attributes.position.count;
+      const arr = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        arr[i * 3] = c.r;
+        arr[i * 3 + 1] = c.g;
+        arr[i * 3 + 2] = c.b;
+      }
+      g.setAttribute("color", new THREE.BufferAttribute(arr, 3));
+      return g;
+    };
+    // normalized tree (size = 1), scaled per-instance
+    const trunk = paint(new THREE.CylinderGeometry(0.07, 0.1, 0.8, 6).translate(0, 0.4, 0), "#5a4732");
+    const cone1 = paint(new THREE.ConeGeometry(0.5, 1.0, 7).translate(0, 0.95, 0), "#3f5d34");
+    const cone2 = paint(new THREE.ConeGeometry(0.36, 0.8, 7).translate(0, 1.45, 0), "#47683a");
+    const parts = [trunk, cone1, cone2].map((g) => g.toNonIndexed());
+    // manual merge (all parts share position/normal/uv/color attributes)
+    const total = parts.reduce((s, g) => s + g.attributes.position.count, 0);
+    const merged = new THREE.BufferGeometry();
+    for (const name of ["position", "normal", "color"]) {
+      const arr = new Float32Array(total * 3);
+      let off = 0;
+      for (const g of parts) {
+        arr.set(g.attributes[name].array as Float32Array, off);
+        off += g.attributes[name].count * 3;
+      }
+      merged.setAttribute(name, new THREE.BufferAttribute(arr, 3));
+    }
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const mats = TREES.map((p) => {
+      q.setFromEuler(new THREE.Euler(0, p.rot, 0));
+      return m
+        .clone()
+        .compose(new THREE.Vector3(p.x, terrainHeight(p.x, p.z), p.z), q.clone(), new THREE.Vector3(p.size, p.size, p.size));
+    });
+    return { geometry: merged, matrices: mats };
+  }, []);
+
+  return (
+    <group>
+      <instancedMesh
+        args={[geometry, undefined, matrices.length]}
+        castShadow
+        receiveShadow
+        ref={(im) => {
+          if (!im) return;
+          matrices.forEach((m, i) => im.setMatrixAt(i, m));
+          im.instanceMatrix.needsUpdate = true;
+        }}
+      >
+        <meshStandardMaterial vertexColors roughness={1} flatShading />
+      </instancedMesh>
+      {/* trunk colliders only (no draw cost) */}
+      {TREES.map((p, i) => (
+        <RigidBody key={i} type="fixed" colliders={false} position={[p.x, terrainHeight(p.x, p.z), p.z]}>
+          <CuboidCollider args={[0.12 * p.size, p.size, 0.12 * p.size]} position={[0, p.size, 0]} />
+        </RigidBody>
+      ))}
+    </group>
+  );
+}
+
 // Glowing, pulsing lava pool in the volcano crater.
 function Lava() {
   const y = useMemo(() => terrainHeight(VOLCANO.x, VOLCANO.z) + 1.5, []);
@@ -53,6 +124,7 @@ export default function Terrain() {
 
       <Lava />
       <Lake />
+      <Forest />
 
       {/* Invisible boundary walls so you can't drive off the world */}
       {([
@@ -66,8 +138,8 @@ export default function Terrain() {
         </RigidBody>
       ))}
 
-      {/* Scattered rocks & logs */}
-      {PROPS.map((p, i) => {
+      {/* Scattered rocks, logs, flora & landmarks (trees are instanced above) */}
+      {GROUND_PROPS.map((p, i) => {
         const y = terrainHeight(p.x, p.z);
         if (p.type === "rock") {
           // Rounded, partly-buried boulder: the wheels roll up and over it
@@ -125,27 +197,6 @@ export default function Terrain() {
               <CuboidCollider args={[s * 0.14, s * 0.45, s * 0.15]} position={[-s * 0.6, s * 0.45, 0]} />
               <CuboidCollider args={[s * 0.14, s * 0.45, s * 0.15]} position={[s * 0.6, s * 0.45, 0]} />
               <CuboidCollider args={[s * 0.75, s * 0.13, s * 0.17]} position={[0, s * 0.97, 0]} />
-            </RigidBody>
-          );
-        }
-        if (p.type === "tree") {
-          // conifer: trunk + stacked foliage cones; thin trunk collider to weave
-          const h = p.size;
-          return (
-            <RigidBody key={i} type="fixed" colliders={false} position={[p.x, y, p.z]} rotation={[0, p.rot, 0]}>
-              <mesh castShadow position={[0, h * 0.4, 0]}>
-                <cylinderGeometry args={[0.28, 0.38, h * 0.8, 7]} />
-                <meshStandardMaterial color="#5a4732" roughness={1} />
-              </mesh>
-              <mesh castShadow position={[0, h * 0.95, 0]}>
-                <coneGeometry args={[h * 0.5, h * 1.0, 8]} />
-                <meshStandardMaterial color="#3f5d34" roughness={1} flatShading />
-              </mesh>
-              <mesh castShadow position={[0, h * 1.45, 0]}>
-                <coneGeometry args={[h * 0.36, h * 0.8, 8]} />
-                <meshStandardMaterial color="#47683a" roughness={1} flatShading />
-              </mesh>
-              <CuboidCollider args={[0.4, h, 0.4]} position={[0, h, 0]} />
             </RigidBody>
           );
         }

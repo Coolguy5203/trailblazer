@@ -43,6 +43,10 @@ interface GameState {
   mapPos: { x: number; z: number; yaw: number };
   setMapPos: (p: { x: number; z: number; yaw: number }) => void;
 
+  // navigation destination picked on the map (cleared on arrival)
+  destination: { x: number; z: number; name: string } | null;
+  setDestination: (d: { x: number; z: number; name: string } | null) => void;
+
   // --- time-trial run state ---
   courseId: string | null; // active course (null = free roam)
   cpIndex: number; // next checkpoint to hit (0 = start line)
@@ -95,6 +99,9 @@ export const useGame = create<GameState>((set) => ({
 
   mapPos: { x: 0, z: 0, yaw: 0 },
   setMapPos: (mapPos) => set({ mapPos }),
+
+  destination: null,
+  setDestination: (destination) => set({ destination }),
 
   courseId: null,
   cpIndex: 0,

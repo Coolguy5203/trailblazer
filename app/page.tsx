@@ -173,6 +173,10 @@ export default function Page() {
         const fwx = 2 * (quat.x * quat.z + quat.w * quat.y);
         const fwz = 1 - 2 * (quat.x * quat.x + quat.y * quat.y);
         st.setMapPos({ x: pos.x, z: pos.z, yaw: Math.atan2(fwx, -fwz) });
+        // arrived at the picked destination → clear it
+        if (st.destination && Math.hypot(pos.x - st.destination.x, pos.z - st.destination.z) < 30) {
+          st.setDestination(null);
+        }
       }
 
       if (st.courseId && st.runState !== "finished") {

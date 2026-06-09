@@ -35,21 +35,41 @@ function w(x: number, z: number, reg: Region) {
   return smoothstep(reg.radius, reg.radius * 0.25, d);
 }
 
+// Rectangular cell weight: 1 across the whole square cell, feathering only in a
+// short band at the borders. Used for cells that must be genuinely flat
+// corner-to-corner (home, basecamp, speedway, mirage).
+function wRect(x: number, z: number, reg: Region) {
+  const fx = smoothstep(reg.radius, reg.radius - 55, Math.abs(x - reg.x));
+  const fz = smoothstep(reg.radius, reg.radius - 55, Math.abs(z - reg.z));
+  return fx * fz;
+}
+
 // --- Trail network: smooth packed-dirt roads on the grid lines that run
 // through every cell centre (x or z = ±300 / ±900). Off-trail terrain is rough;
 // on-trail it's smooth, so trails are the easy way to traverse the map.
 const TRAIL_LINES = [-900, -300, 300, 900];
-const TRAIL_HALF = 9; // flat width
+const TRAIL_HALF = 10; // flat width
 const TRAIL_BLEND = 7; // feather
 
 export function trailMask(x: number, z: number): number {
   let d = Infinity;
+  // curving lattice trails through every cell centre: each line meanders with a
+  // long sine wobble so they read as real trails, not surveyors' lines
   for (const c of TRAIL_LINES) {
-    const dx = Math.abs(x - c);
+    const dx = Math.abs(x - (c + Math.sin(z * 0.009 + c * 0.013) * 42));
     if (dx < d) d = dx;
-    const dz = Math.abs(z - c);
+    const dz = Math.abs(z - (c + Math.cos(x * 0.008 + c * 0.011) * 42));
     if (dz < d) d = dz;
   }
+  // two long diagonal routes (also meandering):
+  // NE diagonal links basin–proving/home–speedway–badlands
+  const s = (x - z) / Math.SQRT2;
+  const t = (x + z) / Math.SQRT2;
+  const d1 = Math.abs(s - Math.sin(t * 0.007) * 48);
+  if (d1 < d) d = d1;
+  // NW diagonal links mirage–basecamp–proving–basin
+  const d2 = Math.abs(t - Math.sin(s * 0.0065 + 2.1) * 48);
+  if (d2 < d) d = d2;
   return smoothstep(TRAIL_HALF + TRAIL_BLEND, TRAIL_HALF, d);
 }
 
@@ -62,8 +82,8 @@ function roughness(x: number, z: number): number {
   );
 }
 
-// --- Forest lake in Whispering Pines ---
-export const LAKE = { x: -1000, z: -760, r: 70, waterY: -3.2 };
+// --- Mirror Lake: the centrepiece of Whispering Pines ---
+export const LAKE = { x: -900, z: -880, r: 115, waterY: -3.2 };
 
 // A wedge ramp rising along +x within a small footprint.
 function ramp(x: number, z: number, cx: number, cz: number, len: number, wid: number, h: number) {
@@ -124,30 +144,23 @@ export function spiralMountain(x: number, z: number): { hm: number; wm: number; 
  * each area suits a different driving style. No real-world references.
  */
 export function terrainHeight(x: number, z: number): number {
-  const dHome = Math.hypot(x - C.home.x, z - C.home.z);
-
   // gentle, long-wavelength global rolling base
   let h =
     Math.sin(x * 0.02) * Math.cos(z * 0.018) * 3.2 +
     Math.sin(x * 0.045 + 1.3) * Math.cos(z * 0.04) * 1.6;
 
-  // flatten the home pad, Basecamp, and the dead-flat speed pans
-  h *= smoothstep(14, 50, dHome);
-  h *= 1 - 0.85 * w(x, z, C.basecamp);
-  h *= 1 - 0.9 * w(x, z, C.speedway);
-  h *= 1 - 0.92 * w(x, z, C.mirage); // Mirage Flats: cracked dry lake, flat
+  // flat cells are GENUINELY flat, corner to corner (rect feather at borders)
+  const flat = Math.max(wRect(x, z, C.home), wRect(x, z, C.basecamp), wRect(x, z, C.speedway), wRect(x, z, C.mirage));
+  h *= 1 - flat;
 
   // --- global off-trail roughness: the map is hard to traverse EXCEPT on the
-  // trail network. Suppressed on trails, the flat pans, home/basecamp, and
-  // halved in the dunes so the dash stays fun.
+  // trail network. Zeroed on trails + flat cells, halved in the dunes so the
+  // dash stays fun, reduced at the proving ramp run-ups.
   {
     let amp = 1 - trailMask(x, z);
-    amp *= smoothstep(14, 50, dHome);
-    amp *= 1 - 0.95 * w(x, z, C.basecamp);
-    amp *= 1 - 0.95 * w(x, z, C.speedway);
-    amp *= 1 - 0.95 * w(x, z, C.mirage);
+    amp *= 1 - flat;
     amp *= 1 - 0.5 * w(x, z, C.dunes);
-    amp *= 1 - 0.6 * w(x, z, C.proving); // keep ramp run-ups usable
+    amp *= 1 - 0.6 * w(x, z, C.proving);
     h += roughness(x, z) * amp;
   }
 
@@ -160,10 +173,15 @@ export function terrainHeight(x: number, z: number): number {
   h += bump(x, z, C.cinder.x, C.cinder.z, C.cinder.radius * 0.97, 95);
   h += -bump(x, z, C.cinder.x, C.cinder.z, C.cinder.radius * 0.36, 72); // crater
 
-  // --- Whispering Pines: gentle rolling forest floor (trees are props) ---
+  // --- Whispering Pines: gentle rolling forest floor (trees are props),
+  // calmed near Mirror Lake so the shoreline reads clean ---
   {
     const wp = w(x, z, C.pines);
-    if (wp > 0) h += (Math.sin(x * 0.07) * Math.cos(z * 0.06) * 4 + Math.sin(z * 0.04) * 2) * wp;
+    if (wp > 0) {
+      const dLake = Math.hypot(x - LAKE.x, z - LAKE.z);
+      const calm = smoothstep(LAKE.r + 10, LAKE.r + 60, dLake);
+      h += (Math.sin(x * 0.07) * Math.cos(z * 0.06) * 4 + Math.sin(z * 0.04) * 2) * wp * calm;
+    }
   }
 
   // --- The Rift: raised mesa fins with slot canyons carved between them ---
@@ -222,12 +240,15 @@ export function terrainHeight(x: number, z: number): number {
     }
   }
 
-  // --- Forest lake in Whispering Pines: a bowl below the waterline ---
-  h += -bump(x, z, LAKE.x, LAKE.z, LAKE.r, 9);
+  // --- Mirror Lake: a bowl below the waterline, with a small island ---
+  h += -bump(x, z, LAKE.x, LAKE.z, LAKE.r, 10);
+  h += bump(x, z, LAKE.x + 18, LAKE.z - 12, 30, 13); // island pokes above the water
 
-  // raised rim border so the map has a soft natural edge
-  h += smoothstep(HALF - 95, HALF - 22, Math.abs(x)) * 24;
-  h += smoothstep(HALF - 95, HALF - 22, Math.abs(z)) * 24;
+  // raised rim border so the map has a soft natural edge (kept out of the flat
+  // pans — the invisible boundary walls still stop you there)
+  const rim =
+    smoothstep(HALF - 95, HALF - 22, Math.abs(x)) * 24 + smoothstep(HALF - 95, HALF - 22, Math.abs(z)) * 24;
+  h += rim * (1 - flat);
 
   // blend the humongous spiral mountain over the base terrain
   const m = spiralMountain(x, z);
@@ -277,8 +298,11 @@ export function buildTerrain(): TerrainData {
     if (ash > 0) c.lerp(cinderCol, ash * 0.85);
     const bad = w(x, z, C.badlands);
     if (bad > 0) c.lerp(rock, bad * 0.65);
-    const lakeBed = smoothstep(LAKE.r, LAKE.r * 0.5, Math.hypot(x - LAKE.x, z - LAKE.z));
+    const dLake = Math.hypot(x - LAKE.x, z - LAKE.z);
+    const lakeBed = smoothstep(LAKE.r, LAKE.r * 0.5, dLake);
     if (lakeBed > 0) c.lerp(new THREE.Color("#3d4a3a"), lakeBed * 0.6);
+    const beach = smoothstep(LAKE.r + 22, LAKE.r + 6, dLake) * smoothstep(LAKE.r * 0.78, LAKE.r * 0.95, dLake);
+    if (beach > 0) c.lerp(sand, beach * 0.8); // sandy shoreline ring
     const trail = trailMask(x, z);
     if (trail > 0) c.lerp(roadCol, trail * 0.85);
     const road = spiralMountain(x, z).road;
@@ -352,9 +376,11 @@ const RAW_PROPS: Prop[] = [
   { type: "rock", x: 890, z: 320, size: 2.2, rot: 0.5 },
   { type: "rock", x: 920, z: 300, size: 1.6, rot: 1.4 },
   { type: "rock", x: 872, z: 344, size: 1.8, rot: 2.2 },
-  // Forests
-  ...scatter("tree", -900, -900, 255, 60, 12345, 3, 2.6), // Whispering Pines
-  ...scatter("tree", 300, -900, 200, 18, 9981, 3, 2.6), // Timber Hollow
+  // Forests — DENSE (rendered as instanced meshes, colliders separate)
+  ...scatter("tree", -900, -900, 270, 230, 12345, 2.8, 2.8), // Whispering Pines
+  ...scatter("tree", 300, -900, 240, 90, 9981, 2.8, 2.8), // Timber Hollow
+  // a lone pine on Mirror Lake's island
+  { type: "tree", x: -882, z: -892, size: 5.5, rot: 0.7 },
   // Greenery & desert flora across the map (bushes have no collider — fun, not hard)
   ...scatter("bush", -300, -300, 220, 14, 311, 1.0, 0.8), // home
   ...scatter("bush", 300, -300, 200, 12, 412, 1.0, 0.8), // basecamp
@@ -370,7 +396,10 @@ const RAW_PROPS: Prop[] = [
   { type: "arch", x: 860, z: 940, size: 10, rot: 0.9 }, // badlands gateway
 ];
 
-// keep flora out of the lake
-export const PROPS: Prop[] = RAW_PROPS.filter(
-  (p) => Math.hypot(p.x - LAKE.x, p.z - LAKE.z) > 82 || p.type === "rock" || p.type === "log"
-);
+// keep flora out of the water (but allow the island pine + shoreline rocks/logs)
+export const PROPS: Prop[] = RAW_PROPS.filter((p) => {
+  if (p.type === "rock" || p.type === "log") return true;
+  const d = Math.hypot(p.x - LAKE.x, p.z - LAKE.z);
+  const dIsland = Math.hypot(p.x - (LAKE.x + 18), p.z - (LAKE.z - 12));
+  return d > LAKE.r + 8 || dIsland < 16;
+});
