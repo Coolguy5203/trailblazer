@@ -47,6 +47,10 @@ interface GameState {
   destination: { x: number; z: number; name: string } | null;
   setDestination: (d: { x: number; z: number; name: string } | null) => void;
 
+  // last time the truck touched lava (drives the SCORCHED banner)
+  scorchedAt: number;
+  setScorched: () => void;
+
   // --- time-trial run state ---
   courseId: string | null; // active course (null = free roam)
   cpIndex: number; // next checkpoint to hit (0 = start line)
@@ -102,6 +106,9 @@ export const useGame = create<GameState>((set) => ({
 
   destination: null,
   setDestination: (destination) => set({ destination }),
+
+  scorchedAt: 0,
+  setScorched: () => set({ scorchedAt: Date.now() }),
 
   courseId: null,
   cpIndex: 0,

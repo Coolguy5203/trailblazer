@@ -3,9 +3,17 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { RigidBody, TrimeshCollider, CuboidCollider, BallCollider } from "@react-three/rapier";
-import { buildTerrain, PROPS, terrainHeight, HALF, LAKE } from "@/lib/terrain";
+import { buildTerrain, PROPS, terrainHeight, HALF, LAKE, LAVA } from "@/lib/terrain";
 
-const VOLCANO = { x: 300, z: 900 };
+// Ember boulders strewn on the volcano's flanks — solid, faintly glowing.
+const EMBERS = [
+  { x: 360, z: 760, size: 1.8, rot: 0.4 },
+  { x: 218, z: 792, size: 1.4, rot: 1.3 },
+  { x: 420, z: 960, size: 2.1, rot: 2.2 },
+  { x: 252, z: 1030, size: 1.6, rot: 0.9 },
+  { x: 168, z: 902, size: 1.5, rot: 1.7 },
+  { x: 392, z: 1052, size: 1.3, rot: 0.2 },
+];
 
 const TREES = PROPS.filter((p) => p.type === "tree");
 const GROUND_PROPS = PROPS.filter((p) => p.type !== "tree");
@@ -78,23 +86,139 @@ function Forest() {
   );
 }
 
-// Glowing, pulsing lava pool in the volcano crater.
+// The active volcano: a big molten pool (impassable — Truck scorch-respawns on
+// contact), bubbling lava, rising smoke, glowing streams down the flanks, and
+// ember boulders. All visuals pulse together for a "breathing" mountain.
 function Lava() {
-  const y = useMemo(() => terrainHeight(VOLCANO.x, VOLCANO.z) + 1.5, []);
-  const mat = useRef<THREE.MeshStandardMaterial>(null);
+  const poolMat = useRef<THREE.MeshStandardMaterial>(null);
   const light = useRef<THREE.PointLight>(null);
+  const bubbles = useRef<THREE.Mesh[]>([]);
+  const smoke = useRef<THREE.Mesh[]>([]);
+  const streamMats = useRef<THREE.MeshStandardMaterial[]>([]);
+
+  // precompute each flank stream's placement: a glowing ribbon from just below
+  // the rim down to the foot of the cone, tilted to hug the slope
+  const streams = useMemo(
+    () =>
+      LAVA.streams.map((ang) => {
+        const r0 = 115; // just outside the rim crest
+        const r1 = 268; // foot of the cone
+        const y0 = terrainHeight(LAVA.x + Math.cos(ang) * r0, LAVA.z + Math.sin(ang) * r0);
+        const y1 = terrainHeight(LAVA.x + Math.cos(ang) * r1, LAVA.z + Math.sin(ang) * r1);
+        const rm = (r0 + r1) / 2;
+        const len = Math.hypot(r1 - r0, y0 - y1);
+        return {
+          pos: [LAVA.x + Math.cos(ang) * rm, (y0 + y1) / 2 + 0.4, LAVA.z + Math.sin(ang) * rm] as [number, number, number],
+          yaw: -ang + Math.PI / 2, // plane's local Z runs radially after this yaw
+          tilt: Math.atan2(y0 - y1, r1 - r0),
+          len,
+        };
+      }),
+    []
+  );
+
   useFrame((s) => {
-    const k = 1.6 + Math.sin(s.clock.elapsedTime * 1.7) * 0.5 + Math.sin(s.clock.elapsedTime * 4.3) * 0.25;
-    if (mat.current) mat.current.emissiveIntensity = k;
-    if (light.current) light.current.intensity = 90 + k * 40;
+    const t = s.clock.elapsedTime;
+    const k = 1.7 + Math.sin(t * 1.7) * 0.5 + Math.sin(t * 4.3) * 0.3;
+    if (poolMat.current) poolMat.current.emissiveIntensity = k;
+    if (light.current) light.current.intensity = 110 + k * 50;
+    streamMats.current.forEach((m, i) => {
+      if (m) m.emissiveIntensity = 1.1 + Math.sin(t * 2.1 + i * 1.8) * 0.4;
+    });
+    // lava bubbles: bob up out of the pool and sink back
+    bubbles.current.forEach((b, i) => {
+      if (!b) return;
+      const ph = (t * (0.5 + i * 0.13) + i * 1.7) % 2;
+      b.position.y = LAVA.y + (ph < 1 ? ph : 2 - ph) * 2.2 - 0.6;
+      const sc = 0.8 + Math.sin(t * 3 + i) * 0.2;
+      b.scale.setScalar(sc);
+    });
+    // smoke puffs: rise from the crater, grow and fade, loop
+    smoke.current.forEach((p, i) => {
+      if (!p) return;
+      const ph = ((t * 0.18 + i * 0.34) % 1 + 1) % 1;
+      p.position.y = LAVA.y + 8 + ph * 70;
+      const sc = 6 + ph * 16;
+      p.scale.setScalar(sc);
+      const m = p.material as THREE.MeshBasicMaterial;
+      m.opacity = 0.3 * (1 - ph);
+    });
   });
+
   return (
-    <group position={[VOLCANO.x, y, VOLCANO.z]}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[58, 36]} />
-        <meshStandardMaterial ref={mat} color="#ff5a1f" emissive="#ff7a1f" emissiveIntensity={1.6} roughness={0.6} />
-      </mesh>
-      <pointLight ref={light} position={[0, 14, 0]} color="#ff7a30" intensity={110} distance={220} decay={1.6} />
+    <group>
+      {/* molten pool */}
+      <group position={[LAVA.x, LAVA.y, LAVA.z]}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[LAVA.r, 40]} />
+          <meshStandardMaterial ref={poolMat} color="#ff4a14" emissive="#ff7a1f" emissiveIntensity={1.7} roughness={0.55} />
+        </mesh>
+        {/* hot inner core */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.25, 0]}>
+          <circleGeometry args={[LAVA.r * 0.45, 28]} />
+          <meshStandardMaterial color="#ffc24a" emissive="#ffd86b" emissiveIntensity={2.6} roughness={0.4} />
+        </mesh>
+        <pointLight ref={light} position={[0, 16, 0]} color="#ff7a30" intensity={130} distance={260} decay={1.6} />
+        {/* bubbles */}
+        {[0, 1, 2, 3, 4].map((i) => (
+          <mesh
+            key={i}
+            ref={(m) => {
+              if (m) bubbles.current[i] = m;
+            }}
+            position={[Math.cos(i * 1.9) * LAVA.r * 0.5, 0, Math.sin(i * 1.9) * LAVA.r * 0.5]}
+          >
+            <sphereGeometry args={[2.2, 10, 10]} />
+            <meshStandardMaterial color="#ff6a1f" emissive="#ffb24a" emissiveIntensity={2.2} roughness={0.5} />
+          </mesh>
+        ))}
+        {/* smoke column */}
+        {[0, 1, 2].map((i) => (
+          <mesh
+            key={`s${i}`}
+            ref={(m) => {
+              if (m) smoke.current[i] = m;
+            }}
+            position={[Math.cos(i * 2.4) * 10, 20, Math.sin(i * 2.4) * 10]}
+          >
+            <sphereGeometry args={[1, 8, 8]} />
+            <meshBasicMaterial color="#5a5350" transparent opacity={0.25} depthWrite={false} />
+          </mesh>
+        ))}
+      </group>
+
+      {/* glowing streams down the flanks */}
+      {streams.map((st, i) => (
+        <group key={i} position={st.pos} rotation={[0, st.yaw, 0]}>
+          <mesh rotation={[-Math.PI / 2 + st.tilt, 0, 0]}>
+            <planeGeometry args={[7, st.len]} />
+            <meshStandardMaterial
+              ref={(m) => {
+                if (m) streamMats.current[i] = m;
+              }}
+              color="#ff4a14"
+              emissive="#ff8a2f"
+              emissiveIntensity={1.2}
+              roughness={0.6}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        </group>
+      ))}
+
+      {/* ember boulders on the flanks (solid) */}
+      {EMBERS.map((e, i) => {
+        const y = terrainHeight(e.x, e.z);
+        return (
+          <RigidBody key={i} type="fixed" colliders={false} position={[e.x, y + e.size * 0.25, e.z]} rotation={[0, e.rot, 0]}>
+            <mesh castShadow>
+              <dodecahedronGeometry args={[e.size, 0]} />
+              <meshStandardMaterial color="#2c211d" emissive="#ff5a1f" emissiveIntensity={0.45} roughness={0.9} flatShading />
+            </mesh>
+            <BallCollider args={[e.size * 0.85]} />
+          </RigidBody>
+        );
+      })}
     </group>
   );
 }

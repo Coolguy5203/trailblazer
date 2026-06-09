@@ -1,6 +1,27 @@
 "use client";
+import { useEffect, useState } from "react";
 import { useGame } from "@/lib/store";
 import { creditsEarned, formatCredits, CREDIT_SYMBOL } from "@/lib/economy";
+
+function ScorchedBanner() {
+  const scorchedAt = useGame((s) => s.scorchedAt);
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    if (!scorchedAt) return;
+    setShow(true);
+    const t = setTimeout(() => setShow(false), 2600);
+    return () => clearTimeout(t);
+  }, [scorchedAt]);
+  if (!show) return null;
+  return (
+    <div className="absolute left-1/2 top-1/3 -translate-x-1/2 text-center">
+      <div className="animate-pulse rounded-xl bg-orange-600/90 px-6 py-3 shadow-2xl ring-2 ring-amber-300/60">
+        <div className="text-3xl font-black tracking-wide text-white drop-shadow">🔥 SCORCHED!</div>
+        <div className="text-xs font-semibold text-amber-100">Lava is not a shortcut. Towed to the base.</div>
+      </div>
+    </div>
+  );
+}
 
 export default function HUD({ roomCode }: { roomCode?: string }) {
   const speed = useGame((s) => s.speedKmh);
@@ -12,6 +33,7 @@ export default function HUD({ roomCode }: { roomCode?: string }) {
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none">
+      <ScorchedBanner />
       {/* Speedometer (bottom-centre on mobile to clear the minimap + pedals) */}
       <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 flex-col items-center md:bottom-6 md:left-auto md:right-6 md:translate-x-0 md:items-end">
         <div className="flex items-baseline gap-2">

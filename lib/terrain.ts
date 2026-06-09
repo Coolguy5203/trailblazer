@@ -85,6 +85,18 @@ function roughness(x: number, z: number): number {
 // --- Mirror Lake: the centrepiece of Whispering Pines ---
 export const LAKE = { x: -900, z: -880, r: 115, waterY: -3.2 };
 
+// --- Cinder Cone's lava: pool surface + hazard zone (you CANNOT drive through
+// it — Truck.tsx scorch-respawns anything that touches it). Streams are the
+// glowing flows down the flanks (visual + scorch hazard along their run).
+export const LAVA = {
+  x: 300,
+  z: 900,
+  y: 50, // pool surface height — fills most of the crater (floor ~25, rim ~67)
+  r: 58, // pool radius (terrain crosses y=50 near r≈55)
+  streams: [0.6, 2.4, 4.4], // world angles of the flank flows
+  safe: { x: 300, z: 668 }, // scorch respawn point at the volcano's base
+};
+
 // A wedge ramp rising along +x within a small footprint.
 function ramp(x: number, z: number, cx: number, cz: number, len: number, wid: number, h: number) {
   const rx = x - cx,

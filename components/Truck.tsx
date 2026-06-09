@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { readInput } from "@/lib/input";
 import { useGame } from "@/lib/store";
 import { truckSpec, type TruckSpec } from "@/lib/shop";
+import { LAVA, terrainHeight } from "@/lib/terrain";
 
 const MAX_STEER = 0.55;
 
@@ -155,6 +156,36 @@ const Truck = forwardRef<RapierRigidBody, TruckProps>(function Truck(
 
     const t = body.translation();
     const pos = new THREE.Vector3(t.x, t.y, t.z);
+
+    // LAVA IS IMPASSABLE: touch the pool (or a flank stream) and you're
+    // scorched — instant respawn at the volcano's base, facing away.
+    {
+      const dPool = Math.hypot(t.x - LAVA.x, t.z - LAVA.z);
+      let burned = dPool < LAVA.r + 1.2 && t.y < LAVA.y + 2.5;
+      if (!burned && dPool > 110 && dPool < 272) {
+        // flank streams: within ~5u of a stream's radial line while on the cone
+        const ang = Math.atan2(t.z - LAVA.z, t.x - LAVA.x);
+        for (const sa of LAVA.streams) {
+          let dA = Math.abs(ang - sa);
+          if (dA > Math.PI) dA = Math.PI * 2 - dA;
+          if (dA * dPool < 4.5) {
+            burned = true;
+            break;
+          }
+        }
+      }
+      if (burned) {
+        const sy = terrainHeight(LAVA.safe.x, LAVA.safe.z);
+        body.setTranslation({ x: LAVA.safe.x, y: sy + 2.5, z: LAVA.safe.z }, true);
+        body.setRotation(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI, 0)), true);
+        body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        useGame.getState().setScorched();
+        lastPos.current.set(0, 0, 0); // don't count the teleport as distance
+        return;
+      }
+    }
+
     if (lastPos.current.lengthSq() > 0) {
       const d = pos.distanceTo(lastPos.current);
       if (d < 5) addDistance(d);
