@@ -14,6 +14,7 @@ import { CHAPTERS, chapter as getChapter, objectiveGoal, type Chapter } from "@/
 import { completeChapter } from "@/lib/profile";
 import HUD from "@/components/HUD";
 import TouchControls from "@/components/TouchControls";
+import Minimap from "@/components/Minimap";
 
 const STORY_COLOR = "#5ad1ff";
 
@@ -72,6 +73,7 @@ export default function Page() {
   }, [screen, profile]);
 
   const sessionStart = useRef(0);
+  const lastMap = useRef(0);
   const startSession = useCallback(() => {
     resetSession();
     exitCourseStore();
@@ -162,6 +164,16 @@ export default function Page() {
       const st = useGame.getState();
       const rid = regionAt(pos.x, pos.z)?.id ?? "wilds";
       if (rid !== st.regionId) st.setRegionId(rid);
+
+      // throttled minimap update (~10 Hz): yaw is the screen rotation of the
+      // forward vector for a top-down map (x right, z down).
+      const nowMs = performance.now();
+      if (nowMs - lastMap.current > 90) {
+        lastMap.current = nowMs;
+        const fwx = 2 * (quat.x * quat.z + quat.w * quat.y);
+        const fwz = 1 - 2 * (quat.x * quat.x + quat.y * quat.y);
+        st.setMapPos({ x: pos.x, z: pos.z, yaw: Math.atan2(fwx, -fwz) });
+      }
 
       if (st.courseId && st.runState !== "finished") {
         const c = getCourse(st.courseId);
@@ -305,8 +317,9 @@ export default function Page() {
             onExit={onLeaveDriving}
           />
         )}
+        <Minimap />
         {room.code && (
-          <div className="pointer-events-none absolute right-6 top-6 rounded-lg bg-black/35 px-3 py-2 text-sm text-white backdrop-blur">
+          <div className="pointer-events-none absolute left-1/2 top-16 -translate-x-1/2 rounded-lg bg-black/35 px-3 py-1.5 text-xs text-white backdrop-blur md:bottom-6 md:top-auto">
             {room.memberCount} driver{room.memberCount === 1 ? "" : "s"} online
           </div>
         )}

@@ -39,6 +39,10 @@ interface GameState {
   regionId: string | null;
   setRegionId: (id: string | null) => void;
 
+  // player transform for the minimap (throttled updates; yaw = screen rotation)
+  mapPos: { x: number; z: number; yaw: number };
+  setMapPos: (p: { x: number; z: number; yaw: number }) => void;
+
   // --- time-trial run state ---
   courseId: string | null; // active course (null = free roam)
   cpIndex: number; // next checkpoint to hit (0 = start line)
@@ -88,6 +92,9 @@ export const useGame = create<GameState>((set) => ({
 
   regionId: null,
   setRegionId: (regionId) => set({ regionId }),
+
+  mapPos: { x: 0, z: 0, yaw: 0 },
+  setMapPos: (mapPos) => set({ mapPos }),
 
   courseId: null,
   cpIndex: 0,

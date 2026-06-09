@@ -12,10 +12,10 @@ export default function HUD({ roomCode }: { roomCode?: string }) {
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none">
-      {/* Speedometer (top-right on mobile to clear the gas pedal) */}
-      <div className="absolute right-4 top-16 flex flex-col items-end md:bottom-6 md:right-6 md:top-auto">
+      {/* Speedometer (bottom-centre on mobile to clear the minimap + pedals) */}
+      <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 flex-col items-center md:bottom-6 md:left-auto md:right-6 md:translate-x-0 md:items-end">
         <div className="flex items-baseline gap-2">
-          <span className="font-mono text-6xl font-bold tabular-nums text-white drop-shadow-lg">
+          <span className="font-mono text-4xl font-bold tabular-nums text-white drop-shadow-lg md:text-6xl">
             {Math.round(speed)}
           </span>
           <span className="text-lg font-semibold text-white/80">km/h</span>
