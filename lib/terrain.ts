@@ -141,7 +141,7 @@ export function spiralMountain(x: number, z: number): { hm: number; wm: number; 
   // smooth the seam (the n-step) over a small radial band so it's a steep ramp,
   // not a vertical cliff — a determined climber can attack it as a shortcut.
   const f = q - Math.floor(q); // 0..1; 0 = ramp centre, 0.5 = seam
-  const nSmooth = Math.floor(q) + smoothstep(0.5 - 0.16, 0.5 + 0.16, f);
+  const nSmooth = Math.floor(q) + smoothstep(0.5 - 0.11, 0.5 + 0.11, f);
   const hm = clamp(MTN_PITCH * (nSmooth + a), 0, MTN.H);
 
   // tint the drivable ramp (away from the seam) as packed dirt
@@ -173,6 +173,8 @@ export function terrainHeight(x: number, z: number): number {
     amp *= 1 - flat;
     amp *= 1 - 0.5 * w(x, z, C.dunes);
     amp *= 1 - 0.6 * w(x, z, C.proving);
+    // smooth apron around the spiral mountain so the trailhead approach is clean
+    amp *= smoothstep(MTN.R + 25, MTN.R + 110, Math.hypot(x - MTN.x, z - MTN.z));
     h += roughness(x, z) * amp;
   }
 

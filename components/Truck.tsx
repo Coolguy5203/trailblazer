@@ -105,7 +105,10 @@ const Truck = forwardRef<RapierRigidBody, TruckProps>(function Truck(
     steerSmooth.current += (targetSteer - steerSmooth.current) * Math.min(1, dt * 8);
 
     let engine = 0;
-    if (input.throttle !== 0 && speed < spec.maxSpeed) engine = input.throttle * spec.engine;
+    // low-gear torque: up to +80% force at crawl speeds (fades out by ~18 m/s)
+    // so steep grades are climbed with authority without raising top speed
+    const lowGear = 1 + 0.8 * Math.max(0, 1 - speed / 18);
+    if (input.throttle !== 0 && speed < spec.maxSpeed) engine = input.throttle * spec.engine * lowGear;
     let brake = 0;
     if (input.brake) brake = 80;
     else if (input.throttle === 0) brake = 6;
