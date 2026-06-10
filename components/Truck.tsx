@@ -169,7 +169,8 @@ const Truck = forwardRef<RapierRigidBody, TruckProps>(function Truck(
         // flank streams: within ~5u of a stream's radial line while on the cone
         const ang = Math.atan2(t.z - LAVA.z, t.x - LAVA.x);
         for (const sa of LAVA.streams) {
-          let dA = Math.abs(ang - sa);
+          // normalize to [0, π] — atan2 is signed, stream angles aren't
+          let dA = Math.abs(ang - sa) % (Math.PI * 2);
           if (dA > Math.PI) dA = Math.PI * 2 - dA;
           if (dA * dPool < 4.5) {
             burned = true;

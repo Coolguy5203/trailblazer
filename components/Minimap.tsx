@@ -43,6 +43,7 @@ function MapSvg({
   const courseId = useGame((s) => s.courseId);
   const cpIndex = useGame((s) => s.cpIndex);
   const storyChapterN = useGame((s) => s.storyChapter);
+  const storyPhase = useGame((s) => s.storyPhase);
   const storyStep = useGame((s) => s.storyStep);
   const storyHits = useGame((s) => s.storyHits);
   const destination = useGame((s) => s.destination);
@@ -61,7 +62,8 @@ function MapSvg({
       for (let i = cpIndex; i < c.checkpoints.length; i++) remaining.push(c.checkpoints[i]);
     }
   } else if (storyChapterN != null) {
-    const o = getChapter(storyChapterN)?.objective;
+    const ch = getChapter(storyChapterN);
+    const o = ch?.objectives[Math.min(storyPhase, (ch?.objectives.length ?? 1) - 1)];
     if (o) {
       if (o.kind === "reach") target = o.target;
       else if (o.kind === "gates" && storyStep < o.points.length) {

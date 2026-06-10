@@ -66,15 +66,19 @@ interface GameState {
   setBearing: (b: number) => void;
   exitCourse: () => void;
 
-  // --- story run state ---
+  // --- story run state (chapters have a SEQUENCE of objectives = phases) ---
   storyChapter: number | null;
-  storyStep: number; // discrete progress (collected / gates passed / 0|1)
+  storyPhase: number; // index into chapter.objectives
+  storyStep: number; // discrete progress within the current phase
   storyGoal: number;
-  storyDone: boolean;
-  storyHits: number[]; // indices of collected flags / passed gates (for hiding markers)
+  phaseDone: boolean; // current phase finished (page advances or completes)
+  storyDone: boolean; // whole chapter finished
+  storyHits: number[]; // hit indices within the current phase
   startStory: (n: number, goal: number) => void;
+  advancePhase: (goal: number) => void;
   storyHit: (index: number) => void;
   storyReach: () => void;
+  finishStory: () => void;
   exitStory: () => void;
 
   // app phase
@@ -132,21 +136,27 @@ export const useGame = create<GameState>((set) => ({
   exitCourse: () => set({ courseId: null, cpIndex: 0, cpCount: 0, runState: "ready", elapsedMs: 0, bestMs: null }),
 
   storyChapter: null,
+  storyPhase: 0,
   storyStep: 0,
   storyGoal: 1,
+  phaseDone: false,
   storyDone: false,
   storyHits: [],
   startStory: (storyChapter, storyGoal) =>
-    set({ storyChapter, storyGoal, storyStep: 0, storyDone: false, storyHits: [] }),
+    set({ storyChapter, storyGoal, storyPhase: 0, storyStep: 0, phaseDone: false, storyDone: false, storyHits: [] }),
+  advancePhase: (goal) =>
+    set((s) => ({ storyPhase: s.storyPhase + 1, storyGoal: goal, storyStep: 0, phaseDone: false, storyHits: [] })),
   storyHit: (index) =>
     set((s) => {
-      if (s.storyDone || s.storyHits.includes(index)) return {};
+      if (s.phaseDone || s.storyDone || s.storyHits.includes(index)) return {};
       const hits = [...s.storyHits, index];
       const step = hits.length;
-      return { storyHits: hits, storyStep: step, storyDone: step >= s.storyGoal };
+      return { storyHits: hits, storyStep: step, phaseDone: step >= s.storyGoal };
     }),
-  storyReach: () => set((s) => (s.storyDone ? {} : { storyStep: s.storyGoal, storyDone: true })),
-  exitStory: () => set({ storyChapter: null, storyStep: 0, storyGoal: 1, storyDone: false, storyHits: [] }),
+  storyReach: () => set((s) => (s.phaseDone || s.storyDone ? {} : { storyStep: s.storyGoal, phaseDone: true })),
+  finishStory: () => set({ phaseDone: false, storyDone: true }),
+  exitStory: () =>
+    set({ storyChapter: null, storyPhase: 0, storyStep: 0, storyGoal: 1, phaseDone: false, storyDone: false, storyHits: [] }),
 
   phase: "menu",
   setPhase: (phase) => set({ phase }),

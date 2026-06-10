@@ -53,6 +53,19 @@ export default function Page() {
   const storyHits = useGame((s) => s.storyHits);
   const activeChapter = getChapter(storyChapterN);
   const [storyResult, setStoryResult] = useState<{ awarded: number } | null>(null);
+  const [briefing, setBriefing] = useState<Chapter | null>(null);
+  const storyPhase = useGame((s) => s.storyPhase);
+  const phaseDone = useGame((s) => s.phaseDone);
+  const advancePhase = useGame((s) => s.advancePhase);
+  const finishStory = useGame((s) => s.finishStory);
+
+  // a phase finished → advance to the next objective, or complete the chapter
+  useEffect(() => {
+    if (!phaseDone || !activeChapter) return;
+    const next = activeChapter.objectives[storyPhase + 1];
+    if (next) advancePhase(objectiveGoal(next));
+    else finishStory();
+  }, [phaseDone, activeChapter, storyPhase, advancePhase, finishStory]);
 
   // restore session on load
   useEffect(() => {
@@ -98,15 +111,13 @@ export default function Page() {
       setRegionId(null);
       const [sx, sz] = c.spawn;
       setSpawn([sx, checkpointY(sx, sz) + 2.5, sz]);
-      // face the first objective point
+      // face the first objective's first point
+      const o = c.objectives[0];
       const tgt =
-        c.objective.kind === "reach"
-          ? c.objective.target
-          : c.objective.kind === "gates" || c.objective.kind === "collect"
-            ? c.objective.points[0]
-            : [sx, sz + 1];
+        o.kind === "reach" ? o.target : o.kind === "gates" || o.kind === "collect" ? o.points[0] : [sx, sz + 1];
       setSpawnYaw(Math.atan2(tgt[0] - sx, tgt[1] - sz));
-      startStoryStore(c.n, objectiveGoal(c.objective));
+      startStoryStore(c.n, objectiveGoal(o));
+      setBriefing(c); // mission briefing overlay shown over the start
       sessionStart.current = performance.now();
       setScreen("driving");
     },
@@ -200,10 +211,10 @@ export default function Page() {
         }
       }
 
-      // story-mode objective tracking
-      if (st.storyChapter != null && !st.storyDone) {
+      // story-mode objective tracking (current phase of the chapter)
+      if (st.storyChapter != null && !st.storyDone && !st.phaseDone) {
         const ch = getChapter(st.storyChapter);
-        const o = ch?.objective;
+        const o = ch?.objectives[st.storyPhase];
         if (o) {
           if (o.kind === "reach") {
             const d = Math.hypot(pos.x - o.target[0], pos.z - o.target[1]);
@@ -289,7 +300,7 @@ export default function Page() {
           cpColor={activeCourse?.color}
           story={
             activeChapter
-              ? { objective: activeChapter.objective, hits: storyHits, step: storyStep, color: STORY_COLOR }
+              ? { objective: activeChapter.objectives[storyPhase], hits: storyHits, step: storyStep, color: STORY_COLOR }
               : undefined
           }
           onFrame={onFrame}
@@ -297,7 +308,8 @@ export default function Page() {
         <HUD roomCode={room.code ?? undefined} />
         {!activeCourse && !activeChapter && <RegionBanner />}
         {activeCourse && <CourseHUD course={activeCourse} />}
-        {activeChapter && <StoryHUD chapter={activeChapter} step={storyStep} />}
+        {activeChapter && <StoryHUD chapter={activeChapter} phase={storyPhase} step={storyStep} />}
+        {briefing && <Briefing chapter={briefing} onClose={() => setBriefing(null)} />}
         {storyResult && activeChapter && (
           <StoryFinish
             chapter={activeChapter}
@@ -655,13 +667,19 @@ function Menu({
           </span>
         </div>
         <div className="space-y-2">
-          {CHAPTERS.map((c) => {
+          {CHAPTERS.map((c, idx) => {
             const done = c.n <= storyProgress;
             const current = c.n === storyProgress + 1;
             const locked = c.n > storyProgress + 1;
+            const newAct = idx === 0 || CHAPTERS[idx - 1].act !== c.act;
             return (
+              <div key={c.id}>
+              {newAct && (
+                <div className="mb-1 mt-3 text-[10px] font-bold uppercase tracking-[0.2em] text-sky-400/80 first:mt-0">
+                  {c.act}
+                </div>
+              )}
               <div
-                key={c.id}
                 className={`rounded-lg p-3 ring-1 transition ${
                   current ? "bg-sky-500/10 ring-sky-400/40" : "bg-stone-900 ring-white/5"
                 } ${locked ? "opacity-60" : ""}`}
@@ -691,6 +709,7 @@ function Menu({
                     {locked ? "🔒" : done ? "Replay" : "Start"}
                   </button>
                 </div>
+              </div>
               </div>
             );
           })}
@@ -900,15 +919,18 @@ function Menu({
   );
 }
 
-function StoryHUD({ chapter, step }: { chapter: Chapter; step: number }) {
-  const o = chapter.objective;
+function StoryHUD({ chapter, phase, step }: { chapter: Chapter; phase: number; step: number }) {
+  const o = chapter.objectives[Math.min(phase, chapter.objectives.length - 1)];
   const goal = objectiveGoal(o);
   const showProgress = o.kind === "collect" || o.kind === "gates";
   return (
     <div className="pointer-events-none absolute left-1/2 top-16 -translate-x-1/2 text-center">
       <div className="rounded-xl bg-black/45 px-6 py-2 backdrop-blur">
         <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-300">
-          Chapter {chapter.n} · {chapter.title}
+          Ch.{chapter.n} · {chapter.title}
+          {chapter.objectives.length > 1 && (
+            <span className="text-sky-200/70"> — objective {Math.min(phase + 1, chapter.objectives.length)}/{chapter.objectives.length}</span>
+          )}
         </div>
         <div className="text-lg font-semibold text-white">{o.hint}</div>
         {showProgress && (
@@ -916,6 +938,33 @@ function StoryHUD({ chapter, step }: { chapter: Chapter; step: number }) {
             {step} / {goal}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function Briefing({ chapter, onClose }: { chapter: Chapter; onClose: () => void }) {
+  return (
+    <div className="absolute inset-0 z-30 grid place-items-center bg-black/65 backdrop-blur-sm">
+      <div className="mx-4 w-full max-w-md rounded-2xl bg-stone-900 p-6 ring-1 ring-sky-400/25">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.25em] text-sky-400">{chapter.act}</div>
+        <div className="mt-1 text-2xl font-black text-white">
+          Chapter {chapter.n}: {chapter.title}
+        </div>
+        <div className="mt-4 rounded-xl bg-stone-800/80 p-4 ring-1 ring-white/10">
+          <div className="text-xs font-bold text-sky-300">{chapter.intro.speaker}</div>
+          <p className="mt-1 text-sm leading-relaxed text-stone-200">“{chapter.intro.text}”</p>
+        </div>
+        <div className="mt-3 text-xs text-stone-400">
+          {chapter.objectives.length} objective{chapter.objectives.length > 1 ? "s" : ""} · first:{" "}
+          <span className="text-stone-200">{chapter.objectives[0].hint}</span>
+        </div>
+        <button
+          onClick={onClose}
+          className="mt-4 w-full rounded-lg bg-sky-500 py-3 font-bold text-black transition hover:brightness-110"
+        >
+          Let&apos;s ride
+        </button>
       </div>
     </div>
   );
@@ -936,10 +985,14 @@ function StoryFinish({
 }) {
   return (
     <div className="absolute inset-0 grid place-items-center bg-black/55 backdrop-blur-sm">
-      <div className="w-80 rounded-2xl bg-stone-900 p-6 text-center ring-1 ring-white/10">
+      <div className="mx-4 w-full max-w-md rounded-2xl bg-stone-900 p-6 text-center ring-1 ring-white/10">
         <div className="text-xs font-semibold uppercase tracking-widest text-sky-300">Chapter {chapter.n} complete</div>
         <div className="my-2 text-2xl font-black text-white">{chapter.title}</div>
-        {!hasNext && <div className="mb-2 text-sm text-amber-200">🏁 You have charted the entire frontier!</div>}
+        <div className="mb-3 rounded-xl bg-stone-800/80 p-3 text-left ring-1 ring-white/10">
+          <div className="text-xs font-bold text-sky-300">{chapter.outro.speaker}</div>
+          <p className="mt-1 text-sm leading-relaxed text-stone-200">“{chapter.outro.text}”</p>
+        </div>
+        {!hasNext && <div className="mb-2 text-sm text-amber-200">🏁 The Vanguard&apos;s warning is finally lit. Campaign complete!</div>}
         {awarded > 0 ? (
           <div className="mb-4 text-sm text-amber-300">
             +{formatCredits(awarded)} {CREDIT_SYMBOL} credits
