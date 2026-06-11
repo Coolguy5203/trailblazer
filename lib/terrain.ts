@@ -73,12 +73,13 @@ export function trailMask(x: number, z: number): number {
   return smoothstep(TRAIL_HALF + TRAIL_BLEND, TRAIL_HALF, d);
 }
 
-// Mid-frequency roughness that makes off-trail driving a real fight.
+// Mild mid-frequency texture off-trail (dramatically downscaled — trails are
+// still the smoothest line, but cross-country is no longer a fight).
 function roughness(x: number, z: number): number {
   return (
-    Math.sin(x * 0.31) * Math.cos(z * 0.29) * 1.1 +
-    Math.sin(x * 0.12 + 1.0) * Math.sin(z * 0.14) * 0.9 +
-    Math.cos((x + z) * 0.22 + 0.5) * 0.5
+    Math.sin(x * 0.31) * Math.cos(z * 0.29) * 0.4 +
+    Math.sin(x * 0.12 + 1.0) * Math.sin(z * 0.14) * 0.32 +
+    Math.cos((x + z) * 0.22 + 0.5) * 0.18
   );
 }
 
@@ -156,10 +157,11 @@ export function spiralMountain(x: number, z: number): { hm: number; wm: number; 
  * each area suits a different driving style. No real-world references.
  */
 export function terrainHeight(x: number, z: number): number {
-  // gentle, long-wavelength global rolling base
+  // gentle, long-wavelength global rolling base (downscaled — filler terrain
+  // between regions stays mild; the named features carry the drama)
   let h =
-    Math.sin(x * 0.02) * Math.cos(z * 0.018) * 3.2 +
-    Math.sin(x * 0.045 + 1.3) * Math.cos(z * 0.04) * 1.6;
+    Math.sin(x * 0.02) * Math.cos(z * 0.018) * 1.6 +
+    Math.sin(x * 0.045 + 1.3) * Math.cos(z * 0.04) * 0.8;
 
   // flat cells are GENUINELY flat, corner to corner (rect feather at borders)
   const flat = Math.max(wRect(x, z, C.home), wRect(x, z, C.basecamp), wRect(x, z, C.speedway), wRect(x, z, C.mirage));

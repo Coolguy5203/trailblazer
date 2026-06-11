@@ -469,10 +469,11 @@ export const CHAPTERS: Chapter[] = [
       { kind: "reach", target: [-700, -95], radius: 14, hint: "Reach the spiral trailhead" },
       {
         kind: "collect",
+        // computed on the spiral ramp's centreline (away from the seam walls)
         points: [
-          [-655, -210],
-          [-755, -440],
-          [-1010, -380],
+          [-1091, -109],
+          [-791, -516],
+          [-1036, -436],
         ],
         hint: "Recover the camp caches on the lower spiral",
       },
