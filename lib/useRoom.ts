@@ -34,6 +34,9 @@ export interface RoomApi {
   join: (code: string, name: string) => Promise<void>;
   leave: () => void;
   sendPose: (pos: [number, number, number], quat: [number, number, number, number]) => void;
+  // what our truck looks like (broadcast with each pose so friends see the real rig)
+  setIdentity: (paintHex: string, truckId: string) => void;
+  sendEmote: (emoji: string) => void;
 }
 
 export function useRoom(): RoomApi {
@@ -41,6 +44,7 @@ export function useRoom(): RoomApi {
   const clientId = useRef<string>(Math.random().toString(36).slice(2));
   const posesRef = useRef<Map<string, RemotePlayer>>(new Map());
   const namesRef = useRef<Map<string, string>>(new Map());
+  const identityRef = useRef<{ color: string; truckId: string }>({ color: "#c8512e", truckId: "stock" });
   const lastSend = useRef(0);
   const hostRef = useRef(false);
   const heartbeat = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -90,14 +94,24 @@ export function useRoom(): RoomApi {
       });
 
       channel.on("broadcast", { event: "pose" }, ({ payload }) => {
-        const p = payload as { id: string; name: string; pose: Pose };
+        const p = payload as { id: string; name: string; color?: string; truckId?: string; pose: Pose };
+        const prev = posesRef.current.get(p.id);
         posesRef.current.set(p.id, {
           id: p.id,
           name: p.name,
-          color: colorFor(p.id),
+          color: p.color ?? colorFor(p.id),
+          truckId: p.truckId ?? "stock",
           pos: p.pose.pos,
           quat: p.pose.quat,
+          emote: prev?.emote,
+          emoteAt: prev?.emoteAt,
         });
+      });
+
+      channel.on("broadcast", { event: "emote" }, ({ payload }) => {
+        const p = payload as { id: string; emoji: string };
+        const prev = posesRef.current.get(p.id);
+        if (prev) posesRef.current.set(p.id, { ...prev, emote: p.emoji, emoteAt: Date.now() });
       });
 
       channel.on("presence", { event: "leave" }, ({ leftPresences }) => {
@@ -168,15 +182,31 @@ export function useRoom(): RoomApi {
       ch.send({
         type: "broadcast",
         event: "pose",
-        payload: { id: clientId.current, name: namesRef.current.get(clientId.current), pose: { pos, quat, t: now } },
+        payload: {
+          id: clientId.current,
+          name: namesRef.current.get(clientId.current),
+          color: identityRef.current.color,
+          truckId: identityRef.current.truckId,
+          pose: { pos, quat, t: now },
+        },
       });
     },
     []
   );
 
+  const setIdentity = useCallback((color: string, truckId: string) => {
+    identityRef.current = { color, truckId };
+  }, []);
+
+  const sendEmote = useCallback((emoji: string) => {
+    const ch = channelRef.current;
+    if (!ch) return;
+    ch.send({ type: "broadcast", event: "emote", payload: { id: clientId.current, emoji } });
+  }, []);
+
   useEffect(() => () => teardown(), [teardown]);
 
-  return { code, isHost: hostRef.current, remotes, memberCount, create, join, leave, sendPose };
+  return { code, isHost: hostRef.current, remotes, memberCount, create, join, leave, sendPose, setIdentity, sendEmote };
 }
 
 export async function browsePublicRooms() {

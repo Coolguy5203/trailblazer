@@ -29,13 +29,21 @@ const SHORT: Record<string, string> = {
   badlands: "Badlands",
 };
 
+interface RemoteDot {
+  id: string;
+  color: string;
+  pos: [number, number, number];
+}
+
 function MapSvg({
   size,
   showNames,
+  remotes = [],
   onPick,
 }: {
   size: number;
   showNames: boolean;
+  remotes?: RemoteDot[];
   onPick?: (x: number, z: number, name: string) => void;
 }) {
   const { x, z, yaw } = useGame((s) => s.mapPos);
@@ -144,6 +152,11 @@ function MapSvg({
         </circle>
       )}
 
+      {/* friends in the lobby */}
+      {remotes.map((r) => (
+        <circle key={r.id} cx={px(r.pos[0])} cy={py(r.pos[2])} r={3} fill={r.color} stroke="#000" strokeWidth={0.6} />
+      ))}
+
       {/* player */}
       <g transform={`translate(${px(x)} ${py(z)}) rotate(${(yaw * 180) / Math.PI})`}>
         <path d="M0 -6 L4 5 L0 2.5 L-4 5 Z" fill="#fff" stroke="#000" strokeWidth={0.6} />
@@ -156,7 +169,7 @@ function MapSvg({
   );
 }
 
-export default function Minimap() {
+export default function Minimap({ remotes = [] }: { remotes?: RemoteDot[] }) {
   const [open, setOpen] = useState(false);
   const regionId = useGame((s) => s.regionId);
   const destination = useGame((s) => s.destination);
@@ -170,7 +183,7 @@ export default function Minimap() {
       {/* small map — tap to expand */}
       <div className="absolute right-4 top-4 select-none">
         <button onClick={() => setOpen(true)} className="block" aria-label="open map">
-          <MapSvg size={SIZE} showNames={false} />
+          <MapSvg size={SIZE} showNames={false} remotes={remotes} />
         </button>
         <div className="pointer-events-none mt-1 text-center text-[10px] font-semibold text-white/80 drop-shadow">
           {regionInfo(regionId).name}
@@ -195,6 +208,7 @@ export default function Minimap() {
             <MapSvg
               size={BIG}
               showNames
+              remotes={remotes}
               onPick={(dx, dz, name) => {
                 setDestination({ x: dx, z: dz, name });
                 setOpen(false);

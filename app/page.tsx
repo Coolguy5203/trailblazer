@@ -85,6 +85,11 @@ export default function Page() {
     if (screen === "menu" && profile) myCourseTimes().then(setCourseTimes);
   }, [screen, profile]);
 
+  // keep the lobby informed of what our truck looks like
+  useEffect(() => {
+    room.setIdentity(paintHex(paintId), truckId);
+  }, [room, paintId, truckId]);
+
   const sessionStart = useRef(0);
   const lastMap = useRef(0);
   const startSession = useCallback(() => {
@@ -333,10 +338,34 @@ export default function Page() {
             onExit={onLeaveDriving}
           />
         )}
-        <Minimap />
+        <Minimap remotes={room.remotes} />
         {room.code && (
-          <div className="pointer-events-none absolute left-1/2 top-16 -translate-x-1/2 rounded-lg bg-black/35 px-3 py-1.5 text-xs text-white backdrop-blur md:bottom-6 md:top-auto">
-            {room.memberCount} driver{room.memberCount === 1 ? "" : "s"} online
+          <div className="pointer-events-none absolute left-1/2 top-16 -translate-x-1/2 rounded-lg bg-black/35 px-3 py-1.5 text-center text-xs text-white backdrop-blur md:bottom-6 md:top-auto">
+            <div className="font-semibold">
+              {room.memberCount} driver{room.memberCount === 1 ? "" : "s"} · {room.code}
+            </div>
+            {room.remotes.length > 0 && (
+              <div className="mt-0.5 flex flex-wrap justify-center gap-x-2 text-white/80">
+                {room.remotes.map((r) => (
+                  <span key={r.id} style={{ color: r.color }}>
+                    {r.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {room.code && (
+          <div className="absolute left-4 top-1/2 flex -translate-y-1/2 flex-col gap-2">
+            {["👋", "❤️", "💨", "🎉"].map((e) => (
+              <button
+                key={e}
+                onClick={() => room.sendEmote(e)}
+                className="grid h-11 w-11 place-items-center rounded-full bg-black/40 text-xl ring-1 ring-white/20 backdrop-blur transition hover:bg-black/60 active:scale-90"
+              >
+                {e}
+              </button>
+            ))}
           </div>
         )}
         <button
