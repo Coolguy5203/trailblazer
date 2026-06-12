@@ -34,6 +34,9 @@ export interface RoomApi {
   join: (code: string, name: string) => Promise<void>;
   leave: () => void;
   sendPose: (pos: [number, number, number], quat: [number, number, number, number]) => void;
+  // everyone currently in the room (from presence — includes players who
+  // haven't moved yet), self included
+  members: { id: string; name: string }[];
   // what our truck looks like (broadcast with each pose so friends see the real rig)
   setIdentity: (paintHex: string, truckId: string) => void;
   sendEmote: (emoji: string) => void;
@@ -49,26 +52,29 @@ export function useRoom(): RoomApi {
   const hostRef = useRef(false);
   const heartbeat = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const codeRef = useRef<string | null>(null); // ref so teardown stays STABLE (see below)
   const [code, setCode] = useState<string | null>(null);
   const [remotes, setRemotes] = useState<RemotePlayer[]>([]);
+  const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [memberCount, setMemberCount] = useState(1);
 
   // flush poses → React state at ~16fps (decoupled from broadcast rate)
   useEffect(() => {
     const iv = setInterval(() => {
-      const now = Date.now();
       const list: RemotePlayer[] = [];
       posesRef.current.forEach((rp, id) => {
         if (id === clientId.current) return;
         list.push(rp);
       });
       setRemotes(list);
-      setMemberCount(1 + list.length);
-      void now;
     }, 60);
     return () => clearInterval(iv);
   }, []);
 
+  // STABLE teardown (no state deps). The previous version depended on `code`,
+  // so when connect() set the code the unmount-cleanup effect re-ran its OLD
+  // cleanup and removed the channel we had JUST subscribed — every lobby died
+  // instantly and players never saw each other.
   const teardown = useCallback(() => {
     if (heartbeat.current) clearInterval(heartbeat.current);
     heartbeat.current = null;
@@ -76,12 +82,13 @@ export function useRoom(): RoomApi {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
-    if (hostRef.current && code) {
-      void supabase.from("tb_public_rooms").delete().eq("code", code);
+    if (hostRef.current && codeRef.current) {
+      void supabase.from("tb_public_rooms").delete().eq("code", codeRef.current);
     }
+    codeRef.current = null;
     posesRef.current.clear();
     namesRef.current.clear();
-  }, [code]);
+  }, []);
 
   const connect = useCallback(
     async (roomCode: string, name: string, host: boolean) => {
@@ -121,6 +128,18 @@ export function useRoom(): RoomApi {
         }
       });
 
+      // presence roster: shows everyone the moment they join (before any pose)
+      channel.on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState() as Record<string, any[]>;
+        const list: { id: string; name: string }[] = [];
+        for (const key of Object.keys(state)) {
+          const meta = state[key][0] ?? {};
+          list.push({ id: meta.id ?? key, name: meta.name ?? "driver" });
+        }
+        setMembers(list);
+        setMemberCount(Math.max(1, list.length));
+      });
+
       await new Promise<void>((resolve) => {
         channel.subscribe(async (status) => {
           if (status === "SUBSCRIBED") {
@@ -131,6 +150,7 @@ export function useRoom(): RoomApi {
       });
 
       channelRef.current = channel;
+      codeRef.current = roomCode;
       setCode(roomCode);
 
       if (host) {
@@ -169,6 +189,7 @@ export function useRoom(): RoomApi {
     teardown();
     setCode(null);
     setRemotes([]);
+    setMembers([]);
     setMemberCount(1);
   }, [teardown]);
 
@@ -206,7 +227,7 @@ export function useRoom(): RoomApi {
 
   useEffect(() => () => teardown(), [teardown]);
 
-  return { code, isHost: hostRef.current, remotes, memberCount, create, join, leave, sendPose, setIdentity, sendEmote };
+  return { code, isHost: hostRef.current, remotes, members, memberCount, create, join, leave, sendPose, setIdentity, sendEmote };
 }
 
 export async function browsePublicRooms() {

@@ -344,13 +344,16 @@ export default function Page() {
             <div className="font-semibold">
               {room.memberCount} driver{room.memberCount === 1 ? "" : "s"} · {room.code}
             </div>
-            {room.remotes.length > 0 && (
+            {room.members.length > 1 && (
               <div className="mt-0.5 flex flex-wrap justify-center gap-x-2 text-white/80">
-                {room.remotes.map((r) => (
-                  <span key={r.id} style={{ color: r.color }}>
-                    {r.name}
-                  </span>
-                ))}
+                {room.members.map((m) => {
+                  const col = room.remotes.find((r) => r.id === m.id)?.color;
+                  return (
+                    <span key={m.id} style={col ? { color: col } : undefined}>
+                      {m.name}
+                    </span>
+                  );
+                })}
               </div>
             )}
           </div>
